@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kanji Flashcard</title>
+<style>
+  /* ===== RESET & BASE ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --correct: #22c55e;
+    --incorrect: #ef4444;
+    --bg: #0f0f1a;
+    --card-bg: #1e1e2e;
+    --accent: #7c3aed;
+    --accent2: #f59e0b;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --radius: 24px;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ===== ANIMATED BG ===== */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at 20% 50%, #7c3aed22 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 20%, #f59e0b22 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  /* ===== HEADER ===== */
+  #header {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px;
+    backdrop-filter: blur(10px);
+    background: rgba(15,15,26,.6);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    z-index: 10;
+  }
+  #header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: .05em; color: var(--accent2); }
+  #progress-text { font-size: .95rem; color: var(--muted); }
+  #score-display { font-size: .9rem; display: flex; gap: 12px; }
+  .score-correct { color: var(--correct); font-weight: 700; }
+  .score-incorrect { color: var(--incorrect); font-weight: 700; }
+
+  /* ===== PROGRESS BAR ===== */
+  #progress-bar-wrap {
+    position: fixed; top: 60px; left: 0; right: 0; height: 4px; background: rgba(255,255,255,.08); z-index: 10;
+  }
+  #progress-bar {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .4s ease; border-radius: 2px;
+  }
+
+  /* ===== CARD WRAPPER ===== */
+  #card-wrap {
+    perspective: 1200px;
+    width: min(420px, 92vw);
+    height: min(520px, 75vh);
+    margin-top: 10px;
+  }
+
+  /* ===== CARD (flip container) ===== */
+  #card {
+    width: 100%; height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform .5s cubic-bezier(.4,0,.2,1), box-shadow .3s;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  #card.flipped { transform: rotateY(180deg); }
+  #card.flash-correct  { animation: flashCorrect .45s ease; }
+  #card.flash-incorrect { animation: flashIncorrect .45s ease; }
+
+  /* ===== CARD FACES ===== */
+  .card-face {
+    position: absolute; inset: 0;
+    border-radius: var(--radius);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.08);
+    box-shadow: 0 25px 60px rgba(0,0,0,.5);
+  }
+
+  /* FRONT */
+  #card-front {
+    background: var(--card-bg);
+  }
+  #kanji-area {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(145deg, #1e1e2e, #2d1b69);
+    border-bottom: 3px solid var(--accent);
+    position: relative;
+  }
+  #kanji-area::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(124,58,237,.15), transparent 70%);
+  }
+  #kanji {
+    font-size: clamp(6rem, 20vw, 9rem);
+    line-height: 1;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 40px rgba(124,58,237,.8), 0 0 80px rgba(245,158,11,.3);
+    position: relative; z-index: 1;
+    transition: transform .2s;
+  }
+  #meaning-area {
+    padding: 28px 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  #meaning {
+    font-size: clamp(1.1rem, 4vw, 1.4rem);
+    font-weight: 600;
+    text-align: center;
+    color: var(--text);
+  }
+  #reading {
+    font-size: .95rem;
+    color: var(--accent2);
+    letter-spacing: .05em;
+  }
+  #hint { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+
+  /* BACK (extra info face) */
+  #card-back {
+    background: linear-gradient(145deg, #1a1a2e, #16213e);
+    transform: rotateY(180deg);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px; padding: 32px;
+    text-align: center;
+  }
+  #back-kanji { font-size: 4rem; opacity: .15; }
+  #back-content { font-size: 1rem; line-height: 1.7; color: var(--muted); }
+  #back-content strong { color: var(--text); }
+
+  /* ===== FLASH ANIMATIONS ===== */
+  @keyframes flashCorrect {
+    0%   { box-shadow: 0 25px 60px rgba(0,0,0,.5); }
+    30%  { box-shadow: 0 0 0 6px var(--correct), 0 25px 60px rgba(34,197,94,.4); transform: scale(1.03); }
+    100% { box-shadow: 0 25px 60px rgba(0,0,0,.5); }
+  }
+  @keyframes flashIncorrect {
+    0%   { box-shadow: 0 25px 60px rgba(0,0,0,.5); }
+    30%  { box-shadow: 0 0 0 6px var(--incorrect), 0 25px 60px rgba(239,68,68,.4); transform: scale(.97); }
+    100% { box-shadow: 0 25px 60px rgba(0,0,0,.5); }
+  }
+
+  /* ===== FEEDBACK OVERLAY ===== */
+  #feedback {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6rem; pointer-events: none;
+    opacity: 0; transition: opacity .2s;
+  }
+  #feedback.show { opacity: 1; animation: feedbackPop .45s ease forwards; }
+  @keyframes feedbackPop {
+    0%   { opacity: 0; transform: scale(.5); }
+    40%  { opacity: 1; transform: scale(1.2); }
+    100% { opacity: 0; transform: scale(1); }
+  }
+
+  /* ===== CONTROLS ===== */
+  #controls {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    padding: 20px 24px;
+    backdrop-filter: blur(10px);
+    background: rgba(15,15,26,.6);
+    border-top: 1px solid rgba(255,255,255,.06);
+  }
+  .btn {
+    border: none; cursor: pointer; border-radius: 50px;
+    font-size: .85rem; font-weight: 700; letter-spacing: .06em;
+    padding: 12px 24px; transition: all .2s; text-transform: uppercase;
+  }
+  #btn-correct {
+    background: linear-gradient(135deg, #166534, var(--correct));
+    color: #fff; box-shadow: 0 4px 20px rgba(34,197,94,.3);
+  }
+  #btn-correct:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(34,197,94,.4); }
+  #btn-incorrect {
+    background: linear-gradient(135deg, #991b1b, var(--incorrect));
+    color: #fff; box-shadow: 0 4px 20px rgba(239,68,68,.3);
+  }
+  #btn-incorrect:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(239,68,68,.4); }
+  #btn-flip {
+    background: linear-gradient(135deg, var(--accent), #4f46e5);
+    color: #fff; box-shadow: 0 4px 20px rgba(124,58,237,.3);
+  }
+  #btn-flip:hover { transform: translateY(-2px); }
+  #btn-shuffle {
+    background: rgba(255,255,255,.07); color: var(--muted);
+    border: 1px solid rgba(255,255,255,.1);
+  }
+  #btn-shuffle:hover { background: rgba(255,255,255,.12); color: var(--text); }
+
+  /* key hints */
+  .key-hint {
+    font-size: .7rem; color: var(--muted); position: absolute;
+    top: -18px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  }
+  .btn-wrap { position: relative; display: inline-block; }
+
+  /* ===== DONE SCREEN ===== */
+  #done-screen {
+    display: none;
+    position: fixed; inset: 0; z-index: 100;
+    background: var(--bg);
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; text-align: center; padding: 24px;
+  }
+  #done-screen.visible { display: flex; }
+  #done-screen h2 { font-size: 2.5rem; font-weight: 900; }
+  #done-screen .big-score {
+    font-size: 4rem; font-weight: 900;
+    background: linear-gradient(135deg, var(--correct), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  #done-screen p { color: var(--muted); font-size: 1.1rem; }
+  #btn-restart {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff; padding: 16px 40px; font-size: 1rem;
+  }
+  #btn-restart:hover { transform: scale(1.04); }
+
+  /* mobile tweaks */
+  @media (max-width: 480px) {
+    .btn { padding: 10px 16px; font-size: .75rem; }
+    #controls { gap: 10px; flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <h1>漢字 Flashcard</h1>
+  <span id="progress-text">1 / 20</span>
+  <div id="score-display">
+    <span class="score-correct">✓ <span id="s-correct">0</span></span>
+    <span class="score-incorrect">✗ <span id="s-incorrect">0</span></span>
+  </div>
+</div>
+<div id="progress-bar-wrap"><div id="progress-bar" style="width:0%"></div></div>
+
+<!-- Feedback overlay -->
+<div id="feedback"></div>
+
+<!-- Card -->
+<div id="card-wrap">
+  <div id="card">
+    <!-- Front -->
+    <div class="card-face" id="card-front">
+      <div id="kanji-area">
+        <div id="kanji">漢</div>
+      </div>
+      <div id="meaning-area">
+        <div id="meaning">Chữ Hán, Người Hán</div>
+        <div id="reading">かん (kan)</div>
+        <div id="hint">← Đúng &nbsp;|&nbsp; Nhấn thẻ để lật &nbsp;|&nbsp; Sai →</div>
+      </div>
+    </div>
+    <!-- Back (flip side) -->
+    <div class="card-face" id="card-back">
+      <div id="back-kanji">漢</div>
+      <div id="back-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <div class="btn-wrap">
+    <span class="key-hint">← phím trái</span>
+    <button class="btn" id="btn-correct">✓ Đúng</button>
+  </div>
+  <div class="btn-wrap">
+    <button class="btn" id="btn-flip">↩ Lật thẻ</button>
+  </div>
+  <div class="btn-wrap">
+    <span class="key-hint">→ phím phải</span>
+    <button class="btn" id="btn-incorrect">✗ Sai</button>
+  </div>
+  <button class="btn" id="btn-shuffle">⇄ Trộn</button>
+</div>
+
+<!-- Done Screen -->
+<div id="done-screen">
+  <h2>🎉 Hoàn thành!</h2>
+  <div class="big-score" id="final-pct">0%</div>
+  <p id="final-detail"></p>
+  <button class="btn" id="btn-restart">↺ Học lại</button>
+</div>
+
+<script>
+// ===========================
+// DATA — 25 JLPT N5/N4 Kanji
+// ===========================
+const KANJI_DATA = [
+  { kanji:"日", meaning:"Ngày, Mặt trời", reading:"にち / ひ (nichi / hi)", detail:"Bộ thủ: 日. Dùng trong: 日曜日 (Chủ nhật), 毎日 (mỗi ngày)." },
+  { kanji:"月", meaning:"Tháng, Mặt trăng", reading:"げつ / つき (getsu / tsuki)", detail:"Bộ thủ: 月. Dùng trong: 月曜日 (Thứ hai), 今月 (tháng này)." },
+  { kanji:"火", meaning:"Lửa", reading:"か / ひ (ka / hi)", detail:"Bộ thủ: 火. Dùng trong: 火曜日 (Thứ ba), 火山 (núi lửa)." },
+  { kanji:"水", meaning:"Nước", reading:"すい / みず (sui / mizu)", detail:"Bộ thủ: 水. Dùng trong: 水曜日 (Thứ tư), 水泳 (bơi lội)." },
+  { kanji:"木", meaning:"Gỗ, Cây", reading:"もく / き (moku / ki)", detail:"Bộ thủ: 木. Dùng trong: 木曜日 (Thứ năm), 木材 (gỗ)." },
+  { kanji:"金", meaning:"Vàng, Tiền", reading:"きん / かね (kin / kane)", detail:"Bộ thủ: 金. Dùng trong: 金曜日 (Thứ sáu), お金 (tiền)." },
+  { kanji:"土", meaning:"Đất", reading:"ど / つち (do / tsuchi)", detail:"Bộ thủ: 土. Dùng trong: 土曜日 (Thứ bảy), 土地 (đất đai)." },
+  { kanji:"山", meaning:"Núi", reading:"さん / やま (san / yama)", detail:"Bộ thủ: 山. Dùng trong: 富士山 (núi Fuji), 火山 (núi lửa)." },
+  { kanji:"川", meaning:"Sông", reading:"かわ (kawa)", detail:"Bộ thủ: 川. Dùng trong: 川魚 (cá sông), 小川 (suối nhỏ)." },
+  { kanji:"人", meaning:"Người", reading:"じん / ひと (jin / hito)", detail:"Bộ thủ: 人. Dùng trong: 人間 (con người), 外国人 (người nước ngoài)." },
+  { kanji:"口", meaning:"Miệng, Cửa", reading:"こう / くち (kou / kuchi)", detail:"Bộ thủ: 口. Dùng trong: 出口 (lối ra), 人口 (dân số)." },
+  { kanji:"手", meaning:"Tay", reading:"しゅ / て (shu / te)", detail:"Bộ thủ: 手. Dùng trong: 手紙 (thư), 上手 (giỏi)." },
+  { kanji:"目", meaning:"Mắt", reading:"もく / め (moku / me)", detail:"Bộ thủ: 目. Dùng trong: 目的 (mục đích), 注目 (chú ý)." },
+  { kanji:"耳", meaning:"Tai", reading:"じ / みみ (ji / mimi)", detail:"Bộ thủ: 耳. Dùng trong: 耳鼻科 (tai mũi họng)." },
+  { kanji:"足", meaning:"Chân, Đủ", reading:"そく / あし (soku / ashi)", detail:"Bộ thủ: 足. Dùng trong: 足りる (đủ), 満足 (thỏa mãn)." },
+  { kanji:"大", meaning:"To, Lớn", reading:"だい / おお (dai / oo)", detail:"Bộ thủ: 大. Dùng trong: 大学 (đại học), 大切 (quan trọng)." },
+  { kanji:"小", meaning:"Nhỏ, Bé", reading:"しょう / ちい (shou / chii)", detail:"Bộ thủ: 小. Dùng trong: 小学校 (tiểu học), 小さい (nhỏ)." },
+  { kanji:"中", meaning:"Giữa, Trong", reading:"ちゅう / なか (chuu / naka)", detail:"Bộ thủ: 中. Dùng trong: 中国 (Trung Quốc), 中学 (trung học)." },
+  { kanji:"上", meaning:"Trên", reading:"じょう / うえ (jou / ue)", detail:"Bộ thủ: 上. Dùng trong: 上手 (giỏi), 上がる (lên)." },
+  { kanji:"下", meaning:"Dưới", reading:"か / した (ka / shita)", detail:"Bộ thủ: 下. Dùng trong: 地下 (dưới đất), 下手 (vụng)." },
+  { kanji:"学", meaning:"Học", reading:"がく / まな (gaku / mana)", detail:"Bộ thủ: 学. Dùng trong: 学校 (trường học), 学生 (học sinh)." },
+  { kanji:"先", meaning:"Trước, Đầu", reading:"せん / さき (sen / saki)", detail:"Bộ thủ: 先. Dùng trong: 先生 (giáo viên), 先週 (tuần trước)." },
+  { kanji:"生", meaning:"Sinh, Sống", reading:"せい / い (sei / i)", detail:"Bộ thủ: 生. Dùng trong: 学生 (học sinh), 誕生日 (sinh nhật)." },
+  { kanji:"年", meaning:"Năm", reading:"ねん / とし (nen / toshi)", detail:"Bộ thủ: 年. Dùng trong: 今年 (năm nay), 来年 (năm tới)." },
+  { kanji:"食", meaning:"Ăn, Thức ăn", reading:"しょく / た (shoku / ta)", detail:"Bộ thủ: 食. Dùng trong: 食べる (ăn), 食事 (bữa ăn)." },
+];
+
+// ===========================
+// STATE
+// ===========================
+let deck = [];        // current shuffled deck
+let idx = 0;          // current card index
+let correct = 0;
+let incorrect = 0;
+let isFlipped = false;
+let isAnimating = false;
+
+// ===========================
+// DOM refs
+// ===========================
+const cardEl       = document.getElementById('card');
+const kanjiEl      = document.getElementById('kanji');
+const meaningEl    = document.getElementById('meaning');
+const readingEl    = document.getElementById('reading');
+const backKanjiEl  = document.getElementById('back-kanji');
+const backContentEl= document.getElementById('back-content');
+const progressText = document.getElementById('progress-text');
+const progressBar  = document.getElementById('progress-bar');
+const sCorrect     = document.getElementById('s-correct');
+const sIncorrect   = document.getElementById('s-incorrect');
+const feedbackEl   = document.getElementById('feedback');
+const doneScreen   = document.getElementById('done-screen');
+const finalPct     = document.getElementById('final-pct');
+const finalDetail  = document.getElementById('final-detail');
+
+// ===========================
+// UTILS
+// ===========================
+function shuffle(arr) {
+  // Fisher-Yates shuffle
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Play a short tone using Web Audio API
+function playTone(freq, type = 'sine', duration = 0.12) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(); osc.stop(ctx.currentTime + duration);
+  } catch(e) { /* audio not available */ }
+}
+
+// ===========================
+// RENDER
+// ===========================
+function renderCard() {
+  const card = deck[idx];
+  kanjiEl.textContent  = card.kanji;
+  meaningEl.textContent = card.meaning;
+  readingEl.textContent = card.reading;
+  backKanjiEl.textContent = card.kanji;
+  backContentEl.innerHTML = `<strong>${card.kanji}</strong><br>${card.meaning}<br><br>${card.detail}`;
+
+  // Update progress
+  progressText.textContent = `${idx + 1} / ${deck.length}`;
+  progressBar.style.width  = `${(idx / deck.length) * 100}%`;
+  sCorrect.textContent    = correct;
+  sIncorrect.textContent  = incorrect;
+
+  // Reset flip state
+  if (isFlipped) {
+    cardEl.classList.remove('flipped');
+    isFlipped = false;
+  }
+}
+
+// ===========================
+// ANSWER
+// ===========================
+function answer(isCorrect) {
+  if (isAnimating) return;
+  isAnimating = true;
+
+  // Update score
+  if (isCorrect) {
+    correct++;
+    playTone(660, 'triangle', 0.15);
+    cardEl.classList.add('flash-correct');
+    feedbackEl.textContent = '✓';
+    feedbackEl.style.color = 'var(--correct)';
+  } else {
+    incorrect++;
+    playTone(220, 'sawtooth', 0.18);
+    cardEl.classList.add('flash-incorrect');
+    feedbackEl.textContent = '✗';
+    feedbackEl.style.color = 'var(--incorrect)';
+  }
+
+  // Show feedback emoji
+  feedbackEl.classList.add('show');
+  setTimeout(() => feedbackEl.classList.remove('show'), 450);
+
+  // Move to next after short delay
+  setTimeout(() => {
+    cardEl.classList.remove('flash-correct', 'flash-incorrect');
+    idx++;
+    if (idx >= deck.length) {
+      showDone();
+    } else {
+      renderCard();
+    }
+    isAnimating = false;
+  }, 420);
+}
+
+// ===========================
+// FLIP
+// ===========================
+function flipCard() {
+  isFlipped = !isFlipped;
+  cardEl.classList.toggle('flipped', isFlipped);
+  playTone(440, 'sine', 0.08);
+}
+
+// ===========================
+// DONE SCREEN
+// ===========================
+function showDone() {
+  const total = correct + incorrect;
+  const pct = total ? Math.round((correct / total) * 100) : 0;
+  finalPct.textContent = `${pct}%`;
+  finalDetail.textContent = `Đúng: ${correct}  ·  Sai: ${incorrect}  ·  Tổng: ${total} thẻ`;
+  progressBar.style.width = '100%';
+  doneScreen.classList.add('visible');
+  playTone(880, 'triangle', 0.3);
+}
+
+// ===========================
+// RESTART
+// ===========================
+function restart() {
+  correct = 0; incorrect = 0; idx = 0; isFlipped = false; isAnimating = false;
+  deck = shuffle(KANJI_DATA);
+  doneScreen.classList.remove('visible');
+  renderCard();
+}
+
+// ===========================
+// EVENT LISTENERS
+// ===========================
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft')  answer(true);
+  if (e.key === 'ArrowRight') answer(false);
+  if (e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); flipCard(); }
+});
+
+// Buttons
+document.getElementById('btn-correct').addEventListener('click', () => answer(true));
+document.getElementById('btn-incorrect').addEventListener('click', () => answer(false));
+document.getElementById('btn-flip').addEventListener('click', flipCard);
+document.getElementById('btn-shuffle').addEventListener('click', () => {
+  deck = shuffle(deck); idx = 0; correct = 0; incorrect = 0;
+  renderCard();
+});
+document.getElementById('btn-restart').addEventListener('click', restart);
+
+// Click card to flip
+cardEl.addEventListener('click', flipCard);
+
+// Touch swipe support
+let touchStartX = 0;
+cardEl.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].clientX; }, { passive: true });
+cardEl.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(dx) > 50) answer(dx > 0); // swipe right = correct, left = incorrect
+  else flipCard(); // tap = flip
+});
+
+// ===========================
+// INIT
+// ===========================
+deck = shuffle(KANJI_DATA);
+renderCard();
+</script>
+</body>
+</html>
