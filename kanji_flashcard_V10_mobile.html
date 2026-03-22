@@ -1,0 +1,2516 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="漢字">
+<meta name="theme-color" content="#0d0d0d">
+<title>漢字 Flashcard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --correct: #10b981; --incorrect: #f43f5e;
+    --bg: #0d0d0d; --card-bg: #141414;
+    --accent: #818cf8; --accent2: #f472b6;
+    --text: #f1f5f9; --muted: #6b7280; --radius: 20px;
+    /* Dynamic safe area for notch/home bar */
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+  html { height: 100%; height: -webkit-fill-available; }
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; min-height: -webkit-fill-available;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    overflow: hidden; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: pan-x pan-y;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 15% 60%, rgba(129,140,248,.12) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 85% 25%, rgba(244,114,182,.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ── HEADER ── */
+  #header {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: calc(10px + var(--sat)) 18px 10px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    background: rgba(15,15,26,.85);
+    border-bottom: 1px solid rgba(255,255,255,.07); z-index: 20; gap: 8px;
+  }
+  #header h1 { font-size: 1rem; font-weight: 800; color: var(--accent2); white-space: nowrap; }
+  #progress-text { font-size: .88rem; color: var(--muted); }
+  #score-display { font-size: .85rem; display: flex; gap: 12px; }
+  .score-correct { color: var(--correct); font-weight: 700; }
+  .score-incorrect { color: var(--incorrect); font-weight: 700; }
+
+  /* ── MODE BAR ── */
+  #mode-bar {
+    position: fixed; top: var(--header-h, 52px); left: 0; right: 0; z-index: 19;
+    display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 14px;
+    background: rgba(15,15,26,.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,255,255,.05);
+  }
+  #timer-select-wrap { display: none; align-items: center; gap: 6px; }
+  #timer-select-wrap span { font-size: .75rem; color: #fca5a5; }
+  .timer-btn {
+    border: 1px solid rgba(239,68,68,.3); background: rgba(239,68,68,.08);
+    color: #fca5a5; border-radius: 50px; font-size: .75rem; font-weight: 700;
+    padding: 6px 14px; cursor: pointer; transition: all .2s;
+    min-height: 36px; /* touch target */
+  }
+  .timer-btn.active-timer { background: #7f1d1d; border-color: var(--incorrect); color: #fff; }
+  .mode-btn {
+    border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.06);
+    color: var(--muted); border-radius: 50px; font-size: .82rem;
+    font-weight: 700; padding: 7px 20px; cursor: pointer; transition: all .2s;
+    min-height: 38px;
+  }
+  .mode-btn.active-easy { background: #166534; color: #86efac; border-color: var(--correct); }
+  .mode-btn.active-hard { background: #7f1d1d; color: #fca5a5; border-color: var(--incorrect); }
+
+  /* ── LEVEL FILTER ── */
+  #level-filter {
+    position: fixed; top: var(--modebar-bottom, 100px); left: 0; right: 0; z-index: 18;
+    display: flex; gap: 6px; justify-content: center; padding: 6px 12px;
+    background: rgba(15,15,26,.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,255,255,.04);
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  #level-filter::-webkit-scrollbar { display: none; }
+  .lvl-btn {
+    border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.05);
+    color: var(--muted); border-radius: 50px; font-size: .78rem;
+    font-weight: 700; padding: 6px 16px; cursor: pointer; transition: all .2s;
+    white-space: nowrap; min-height: 36px; flex-shrink: 0;
+  }
+  .lvl-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ── TIMER / PROGRESS BARS ── */
+  #timer-wrap {
+    position: fixed; top: var(--levelbar-bottom, 136px); left: 0; right: 0; height: 5px;
+    background: rgba(255,255,255,.08); z-index: 17; display: none;
+  }
+  #timer-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b); transform-origin: left; }
+  #progress-bar-wrap { position: fixed; top: var(--levelbar-bottom, 136px); left: 0; right: 0; height: 4px; background: rgba(255,255,255,.08); z-index: 17; }
+  #progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .4s; border-radius: 2px; }
+
+  /* ── INSTRUCTION ── */
+  #instruction {
+    position: fixed; top: calc(var(--levelbar-bottom, 136px) + 10px); left: 50%; transform: translateX(-50%);
+    border-radius: 50px; padding: 5px 16px; font-size: .76rem;
+    white-space: nowrap; z-index: 16; pointer-events: none; transition: all .3s;
+  }
+  #instruction.easy-inst { background: rgba(124,58,237,.2); border: 1px solid rgba(124,58,237,.4); color: var(--accent2); }
+  #instruction.hard-inst { background: rgba(239,68,68,.2); border: 1px solid rgba(239,68,68,.4); color: #fca5a5; }
+  #streak-badge { position: fixed; top: calc(var(--levelbar-bottom, 136px) + 10px); right: 16px; font-size: .85rem; font-weight: 800; color: #fb923c; z-index: 16; display: none; }
+
+  /* ── CARD ── */
+  #card-wrap {
+    perspective: 1200px;
+    width: min(440px, 94vw);
+    height: min(460px, 56vh);
+    margin-top: 30px;
+  }
+  #card {
+    width: 100%; height: 100%; position: relative;
+    transform-style: preserve-3d;
+    transition: transform .45s cubic-bezier(.4,0,.2,1);
+    border-radius: var(--radius); cursor: pointer;
+  }
+  #card.flipped { transform: rotateY(180deg); }
+  #card.flash-correct  { animation: fC .4s ease; }
+  #card.flash-incorrect { animation: fI .4s ease; }
+  @keyframes fC { 0%{box-shadow:0 20px 50px rgba(0,0,0,.5)} 35%{box-shadow:0 0 0 6px var(--correct),0 20px 50px rgba(34,197,94,.4);transform:scale(1.03)} 100%{box-shadow:0 20px 50px rgba(0,0,0,.5)} }
+  @keyframes fI { 0%{box-shadow:0 20px 50px rgba(0,0,0,.5)} 35%{box-shadow:0 0 0 6px var(--incorrect),0 20px 50px rgba(239,68,68,.4);transform:scale(.97)} 100%{box-shadow:0 20px 50px rgba(0,0,0,.5)} }
+  .card-face {
+    position: absolute; inset: 0; border-radius: var(--radius);
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    display: flex; flex-direction: column; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.08); box-shadow: 0 20px 50px rgba(0,0,0,.5);
+  }
+  #card-front { background: var(--card-bg); }
+  #kanji-area {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: linear-gradient(145deg, #1e1e2e, #2d1b69);
+    border-bottom: 3px solid var(--accent); position: relative; gap: 6px;
+  }
+  #kanji-area.hard-glow { border-bottom-color: var(--incorrect); }
+  #kanji-area::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(124,58,237,.15), transparent 70%); }
+  #kanji { font-size: clamp(5rem, 22vw, 8rem); line-height: 1; font-weight: 900; color: #fff; text-shadow: 0 0 40px rgba(124,58,237,.8), 0 0 80px rgba(245,158,11,.3); position: relative; z-index: 1; }
+  #han-viet { font-size: 1rem; color: var(--accent2); font-weight: 700; letter-spacing: .12em; position: relative; z-index: 1; }
+  #meaning-area { padding: 14px 16px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: opacity .3s; }
+  #meaning-area.hidden { opacity: 0; pointer-events: none; }
+  #shown-meaning { font-size: clamp(1rem, 4vw, 1.25rem); font-weight: 700; text-align: center; color: var(--text); }
+  #reading-on  { font-size: .82rem; color: #a78bfa; }
+  #reading-kun { font-size: .82rem; color: #67e8f9; }
+  #verdict-badge { display: none; padding: 4px 14px; border-radius: 50px; font-size: .78rem; font-weight: 700; margin-top: 2px; }
+  #verdict-badge.cb { background:rgba(34,197,94,.2); color:var(--correct); border:1px solid var(--correct); display:inline-block; }
+  #verdict-badge.wb { background:rgba(239,68,68,.2); color:var(--incorrect); border:1px solid var(--incorrect); display:inline-block; }
+  #verdict-hint { font-size: .72rem; color: var(--muted); }
+  #hard-reading { display: none; font-size: .9rem; color: #cbd5e1; position: relative; z-index: 1; text-align: center; line-height: 1.6; margin-top: 4px; }
+  #card-back {
+    background: linear-gradient(145deg, #1a1a2e, #16213e);
+    transform: rotateY(180deg);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; padding: 24px; text-align: center;
+  }
+  #back-kanji { font-size: 3.5rem; opacity: .12; }
+  #back-content { font-size: .92rem; line-height: 1.9; color: var(--muted); }
+  #back-content strong { color: var(--text); }
+  .correct-meaning { color: var(--correct); font-weight: 700; }
+
+  /* ── FEEDBACK ── */
+  #feedback { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; font-size: 7rem; pointer-events: none; opacity: 0; }
+  #feedback.show { animation: fbPop .4s ease forwards; }
+  @keyframes fbPop { 0%{opacity:0;transform:scale(.5)} 40%{opacity:1;transform:scale(1.2)} 100%{opacity:0;transform:scale(1)} }
+
+  /* ── SWIPE HINT (mobile only) ── */
+  #swipe-hint {
+    position: fixed; bottom: calc(var(--controls-h, 80px) + 10px); left: 50%;
+    transform: translateX(-50%);
+    font-size: .68rem; color: rgba(255,255,255,.2);
+    pointer-events: none; z-index: 15; white-space: nowrap;
+    letter-spacing: .05em;
+  }
+
+  /* ── CONTROLS ── */
+  #controls {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 12px 16px calc(12px + var(--sab));
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    background: rgba(15,15,26,.9); border-top: 1px solid rgba(255,255,255,.07);
+  }
+  .btn {
+    border: none; cursor: pointer; border-radius: 50px;
+    font-size: .82rem; font-weight: 700; letter-spacing: .04em;
+    padding: 13px 20px; transition: all .15s; text-transform: uppercase;
+    min-height: 48px; /* WCAG touch target */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  #btn-correct   { background: linear-gradient(135deg,#166534,var(--correct)); color:#fff; box-shadow:0 4px 18px rgba(34,197,94,.3); flex: 1; max-width: 120px; }
+  #btn-incorrect { background: linear-gradient(135deg,#991b1b,var(--incorrect)); color:#fff; box-shadow:0 4px 18px rgba(239,68,68,.3); flex: 1; max-width: 120px; }
+  #btn-flip  { background: linear-gradient(135deg,var(--accent),#4f46e5); color:#fff; flex: 1; max-width: 100px; }
+  #btn-shuffle { background:rgba(255,255,255,.08); color:var(--muted); border:1px solid rgba(255,255,255,.12); padding: 13px 14px; }
+  .btn-wrap { display:flex; flex: 1; max-width: 120px; }
+  .btn-wrap .btn { width: 100%; }
+  .key-hint { display: none; } /* hidden on mobile */
+
+  /* ── MODAL ── */
+  #modal-overlay { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 20px; }
+  #modal-overlay.visible { display: flex; }
+  #modal { background: #1e1e2e; border-radius: 28px; border: 1px solid rgba(255,255,255,.1); padding: 36px 28px; text-align: center; max-width: 360px; width: 100%; box-shadow: 0 30px 80px rgba(0,0,0,.7); display: flex; flex-direction: column; gap: 14px; }
+  #modal-emoji { font-size: 3.5rem; }
+  #modal-title { font-size: 1.6rem; font-weight: 900; }
+  #modal-streak { font-size: 3.2rem; font-weight: 900; background: linear-gradient(135deg, var(--correct), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  #modal-detail { font-size: .95rem; color: var(--muted); line-height: 1.6; }
+  #modal-btn { background: linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; padding:15px 32px; font-size:.95rem; margin-top: 4px; min-height: 52px; }
+
+  /* ── DONE SCREEN ── */
+  #done-screen { display:none; position:fixed; inset:0; z-index:100; background:var(--bg); flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; padding:32px; }
+  #done-screen.visible { display:flex; }
+  #done-screen h2 { font-size:2.2rem; font-weight:900; }
+  .big-score { font-size:3.5rem; font-weight:900; background:linear-gradient(135deg,var(--correct),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  #done-screen p { color:var(--muted); font-size:1rem; }
+  #btn-restart { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; padding:16px 40px; font-size:1rem; min-height: 52px; }
+
+  /* ── ACTIVE STATES (replaces hover for touch) ── */
+  .btn:active { transform: scale(.95); opacity: .85; }
+  .lvl-btn:active, .mode-btn:active, .timer-btn:active { opacity: .7; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>漢字 Flashcard</h1>
+  <span id="progress-text">1 / ?</span>
+  <div id="score-display">
+    <span class="score-correct">✓ <span id="s-correct">0</span></span>
+    <span class="score-incorrect">✗ <span id="s-incorrect">0</span></span>
+  </div>
+</div>
+
+<div id="mode-bar">
+  <button class="mode-btn active-easy" data-mode="easy">🟢 Easy</button>
+  <button class="mode-btn" data-mode="hard">🔴 Hard</button>
+  <div id="timer-select-wrap">
+    <span>⏱</span>
+    <button class="timer-btn" data-sec="3">3s</button>
+    <button class="timer-btn active-timer" data-sec="6">6s</button>
+    <button class="timer-btn" data-sec="8">8s</button>
+  </div>
+</div>
+
+<div id="level-filter">
+  <button class="lvl-btn active" data-lvl="ALL">Tất cả</button>
+  <button class="lvl-btn" data-lvl="N5">N5</button>
+  <button class="lvl-btn" data-lvl="N4">N4</button>
+  <button class="lvl-btn" data-lvl="N3">N3</button>
+  <button class="lvl-btn" data-lvl="N2">N2</button>
+  <button class="lvl-btn" data-lvl="N1">N1</button>
+</div>
+
+<div id="timer-wrap"><div id="timer-bar"></div></div>
+<div id="progress-bar-wrap"><div id="progress-bar" style="width:0%"></div></div>
+<div id="instruction" class="easy-inst">← Đúng &nbsp;|&nbsp; Nghĩa hiển thị là đúng hay sai? &nbsp;|&nbsp; Sai →</div>
+<div id="streak-badge">🔥 0</div>
+<div id="feedback"></div>
+
+<div id="card-wrap">
+  <div id="card">
+    <div class="card-face" id="card-front">
+      <div id="kanji-area">
+        <div id="kanji">漢</div>
+        <div id="han-viet">HÁN</div>
+        <div id="hard-reading"></div>
+      </div>
+      <div id="meaning-area">
+        <div id="shown-meaning">chữ hán</div>
+        <div id="reading-on">On: カン</div>
+        <div id="reading-kun">Kun: —</div>
+        <div id="verdict-badge"></div>
+        <div id="verdict-hint">Nghĩa hiển thị là đúng hay sai?</div>
+      </div>
+    </div>
+    <div class="card-face" id="card-back">
+      <div id="back-kanji">漢</div>
+      <div id="back-content"></div>
+    </div>
+  </div>
+</div>
+
+<div id="swipe-hint">← vuốt đúng &nbsp;·&nbsp; chạm lật &nbsp;·&nbsp; vuốt sai →</div>
+
+<div id="controls">
+  <div class="btn-wrap"><button class="btn" id="btn-correct">✓ Đúng</button></div>
+  <div class="btn-wrap"><button class="btn" id="btn-flip">↩ Lật</button></div>
+  <div class="btn-wrap"><button class="btn" id="btn-incorrect">✗ Sai</button></div>
+  <button class="btn" id="btn-shuffle">⇄</button>
+</div>
+
+<div id="modal-overlay">
+  <div id="modal">
+    <div id="modal-emoji">💥</div>
+    <div id="modal-title"></div>
+    <div id="modal-streak">0</div>
+    <div id="modal-detail"></div>
+    <button class="btn" id="modal-btn">↺ Thử lại</button>
+  </div>
+</div>
+
+<div id="done-screen">
+  <h2>🎉 Hoàn thành!</h2>
+  <div class="big-score" id="final-pct">0%</div>
+  <p id="final-detail"></p>
+  <button class="btn" id="btn-restart">↺ Học lại</button>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// FULL KANJI DATA — N5 + N4 + N3 + N2 (AhoVN)
+// ══════════════════════════════════════════
+const ALL_KANJI = [
+// ===== N5 =====
+{kanji:"安",hanviet:"AN",on:"あん",kun:"やす（い）",meaning:"bình an, an toàn, rẻ",level:"N5"},
+{kanji:"一",hanviet:"NHẤT",on:"いち、いつ",kun:"ひと（つ）",meaning:"một",level:"N5"},
+{kanji:"飲",hanviet:"ẨM",on:"いん",kun:"の（む）",meaning:"uống",level:"N5"},
+{kanji:"右",hanviet:"HỮU",on:"う、ゆ",kun:"みぎ",meaning:"bên phải",level:"N5"},
+{kanji:"雨",hanviet:"VŨ",on:"う",kun:"あめ",meaning:"mưa",level:"N5"},
+{kanji:"駅",hanviet:"DỊCH",on:"えき",kun:"—",meaning:"nhà ga",level:"N5"},
+{kanji:"円",hanviet:"VIÊN",on:"えん",kun:"まる（い）",meaning:"đồng yên, tròn",level:"N5"},
+{kanji:"火",hanviet:"HỎA",on:"か",kun:"ひ",meaning:"lửa",level:"N5"},
+{kanji:"花",hanviet:"HOA",on:"か",kun:"はな",meaning:"hoa",level:"N5"},
+{kanji:"下",hanviet:"HẠ",on:"か、げ",kun:"した",meaning:"dưới, phía dưới",level:"N5"},
+{kanji:"何",hanviet:"HÀ",on:"か",kun:"なに、なん",meaning:"cái gì, cái nào",level:"N5"},
+{kanji:"会",hanviet:"HỘI",on:"かい、え",kun:"あ（う）",meaning:"gặp gỡ, hội họp",level:"N5"},
+{kanji:"話",hanviet:"THOẠI",on:"わ",kun:"はなし、はな（す）",meaning:"nói chuyện",level:"N5"},
+{kanji:"六",hanviet:"LỤC",on:"ろく",kun:"む（つ）",meaning:"sáu",level:"N5"},
+{kanji:"立",hanviet:"LẬP",on:"りつ",kun:"た（つ）",meaning:"đứng, thiết lập",level:"N5"},
+{kanji:"来",hanviet:"LAI",on:"らい",kun:"く（る）",meaning:"đến, tới",level:"N5"},
+{kanji:"友",hanviet:"HỮU",on:"ゆう",kun:"とも",meaning:"bạn",level:"N5"},
+{kanji:"目",hanviet:"MỤC",on:"もく",kun:"め",meaning:"mắt",level:"N5"},
+{kanji:"名",hanviet:"DANH",on:"めい、みょう",kun:"な",meaning:"danh, tên",level:"N5"},
+{kanji:"万",hanviet:"VẠN",on:"まん、ばん",kun:"—",meaning:"vạn (mười ngàn)",level:"N5"},
+{kanji:"毎",hanviet:"MỖI",on:"まい",kun:"—",meaning:"mỗi, mọi",level:"N5"},
+{kanji:"本",hanviet:"BẢN",on:"ほん",kun:"もと",meaning:"sách, nguồn gốc",level:"N5"},
+{kanji:"木",hanviet:"MỘC",on:"ぼく、もく",kun:"き、こ",meaning:"cây, gỗ",level:"N5"},
+{kanji:"北",hanviet:"BẮC",on:"ほく",kun:"きた",meaning:"phía bắc",level:"N5"},
+{kanji:"母",hanviet:"MẪU",on:"ぼ",kun:"はは",meaning:"mẹ",level:"N5"},
+{kanji:"聞",hanviet:"VĂN",on:"ぶん、もん",kun:"き（く）",meaning:"nghe, hỏi",level:"N5"},
+{kanji:"分",hanviet:"PHÂN",on:"ぶん、ぶ、ふん",kun:"わか（る）",meaning:"phút, phân chia, hiểu",level:"N5"},
+{kanji:"父",hanviet:"PHỤ",on:"ふ",kun:"ちち",meaning:"bố",level:"N5"},
+{kanji:"百",hanviet:"BÁCH",on:"ひゃく",kun:"—",meaning:"trăm",level:"N5"},
+{kanji:"半",hanviet:"BÁN",on:"はん",kun:"なか（ば）",meaning:"một nửa",level:"N5"},
+{kanji:"八",hanviet:"BÁT",on:"はち",kun:"やっ（つ）",meaning:"tám",level:"N5"},
+{kanji:"白",hanviet:"BẠCH",on:"はく、びゃく",kun:"しろ（い）",meaning:"trắng",level:"N5"},
+{kanji:"買",hanviet:"MÃI",on:"ばい",kun:"か（う）",meaning:"mua",level:"N5"},
+{kanji:"年",hanviet:"NIÊN",on:"ねん",kun:"とし",meaning:"năm",level:"N5"},
+{kanji:"入",hanviet:"NHẬP",on:"にゅう",kun:"はい（る）",meaning:"vào",level:"N5"},
+{kanji:"日",hanviet:"NHẬT",on:"にち、じつ",kun:"ひ、か",meaning:"ngày, mặt trời",level:"N5"},
+{kanji:"二",hanviet:"NHỊ",on:"に",kun:"ふた（つ）",meaning:"hai",level:"N5"},
+{kanji:"南",hanviet:"NAM",on:"なん",kun:"みなみ",meaning:"phía nam",level:"N5"},
+{kanji:"読",hanviet:"ĐỌC",on:"どく",kun:"よ（む）",meaning:"đọc",level:"N5"},
+{kanji:"道",hanviet:"ĐẠO",on:"どう",kun:"みち",meaning:"đường",level:"N5"},
+{kanji:"東",hanviet:"ĐÔNG",on:"とう",kun:"ひがし",meaning:"phía đông",level:"N5"},
+{kanji:"土",hanviet:"THỔ",on:"ど、と",kun:"つち",meaning:"đất",level:"N5"},
+{kanji:"電",hanviet:"ĐIỆN",on:"でん",kun:"—",meaning:"điện",level:"N5"},
+{kanji:"店",hanviet:"ĐIẾM",on:"てん",kun:"みせ",meaning:"cửa hàng",level:"N5"},
+{kanji:"天",hanviet:"THIÊN",on:"てん",kun:"あめ、あま",meaning:"trời",level:"N5"},
+{kanji:"長",hanviet:"TRƯỞNG",on:"ちょう",kun:"なが（い）",meaning:"dài, trưởng",level:"N5"},
+{kanji:"中",hanviet:"TRUNG",on:"ちゅう",kun:"なか",meaning:"trong, bên trong",level:"N5"},
+{kanji:"男",hanviet:"NAM",on:"だん、なん",kun:"おとこ",meaning:"nam, đàn ông",level:"N5"},
+{kanji:"大",hanviet:"ĐẠI",on:"だい、たい",kun:"おお（きい）",meaning:"to, lớn",level:"N5"},
+{kanji:"多",hanviet:"ĐA",on:"た",kun:"おお（い）",meaning:"nhiều",level:"N5"},
+{kanji:"足",hanviet:"TÚC",on:"そく",kun:"あし、た（りる）",meaning:"chân, đầy đủ",level:"N5"},
+{kanji:"前",hanviet:"TIỀN",on:"ぜん",kun:"まえ",meaning:"trước",level:"N5"},
+{kanji:"先",hanviet:"TIÊN",on:"せん",kun:"さき",meaning:"phía trước",level:"N5"},
+{kanji:"千",hanviet:"THIÊN",on:"せん",kun:"ち",meaning:"một ngàn",level:"N5"},
+{kanji:"川",hanviet:"XUYÊN",on:"せん",kun:"かわ",meaning:"sông",level:"N5"},
+{kanji:"西",hanviet:"TÂY",on:"せい、さい",kun:"にし",meaning:"phía tây",level:"N5"},
+{kanji:"生",hanviet:"SINH",on:"せい、しょう",kun:"い（きる）",meaning:"sống, sinh ra",level:"N5"},
+{kanji:"水",hanviet:"THỦY",on:"すい",kun:"みず",meaning:"nước",level:"N5"},
+{kanji:"人",hanviet:"NHÂN",on:"じん、にん",kun:"ひと",meaning:"người",level:"N5"},
+{kanji:"新",hanviet:"TÂN",on:"しん",kun:"あたら（しい）",meaning:"mới",level:"N5"},
+{kanji:"食",hanviet:"THỰC",on:"しょく",kun:"た（べる）",meaning:"ăn",level:"N5"},
+{kanji:"上",hanviet:"THƯỢNG",on:"しょう、じょう",kun:"うえ、あ（げる）",meaning:"trên, phía trên",level:"N5"},
+{kanji:"少",hanviet:"THIẾU",on:"しょう",kun:"すこ（し）",meaning:"một chút",level:"N5"},
+{kanji:"小",hanviet:"TIỂU",on:"しょう",kun:"ちい（さい）",meaning:"nhỏ, bé",level:"N5"},
+{kanji:"女",hanviet:"NỮ",on:"じょ、にょう",kun:"おんな",meaning:"phụ nữ",level:"N5"},
+{kanji:"書",hanviet:"THƯ",on:"しょ",kun:"か（く）",meaning:"viết",level:"N5"},
+{kanji:"出",hanviet:"XUẤT",on:"しゅつ",kun:"だ（す）、で（る）",meaning:"ra đi, xuất",level:"N5"},
+{kanji:"十",hanviet:"THẬP",on:"じゅう、じ",kun:"とお",meaning:"mười",level:"N5"},
+{kanji:"週",hanviet:"CHU",on:"しゅう",kun:"—",meaning:"tuần",level:"N5"},
+{kanji:"手",hanviet:"THỦ",on:"しゅ",kun:"て",meaning:"tay",level:"N5"},
+{kanji:"社",hanviet:"XÃ",on:"しゃ",kun:"やしろ",meaning:"đền, công ty",level:"N5"},
+{kanji:"車",hanviet:"XA",on:"しゃ",kun:"くるま",meaning:"xe, xe hơi",level:"N5"},
+{kanji:"七",hanviet:"THẤT",on:"しち",kun:"なな（つ）",meaning:"bảy",level:"N5"},
+{kanji:"時",hanviet:"THỜI",on:"じ",kun:"とき",meaning:"thời gian, giờ",level:"N5"},
+{kanji:"耳",hanviet:"NHĨ",on:"じ",kun:"みみ",meaning:"tai",level:"N5"},
+{kanji:"子",hanviet:"TỬ",on:"し、す",kun:"こ",meaning:"đứa bé, trẻ con",level:"N5"},
+{kanji:"四",hanviet:"TỨ",on:"し",kun:"よ（つ）、よん",meaning:"bốn",level:"N5"},
+{kanji:"山",hanviet:"SƠN",on:"さん",kun:"やま",meaning:"núi",level:"N5"},
+{kanji:"三",hanviet:"TAM",on:"さん",kun:"み（つ）",meaning:"ba",level:"N5"},
+{kanji:"左",hanviet:"TẢ",on:"さ",kun:"ひだり",meaning:"bên trái",level:"N5"},
+{kanji:"今",hanviet:"KIM",on:"こん、きん",kun:"いま",meaning:"bây giờ",level:"N5"},
+{kanji:"国",hanviet:"QUỐC",on:"こく",kun:"くに",meaning:"đất nước",level:"N5"},
+{kanji:"高",hanviet:"CAO",on:"こう",kun:"たか（い）",meaning:"cao, đắt",level:"N5"},
+{kanji:"行",hanviet:"HÀNH",on:"こう",kun:"い（く）",meaning:"đi",level:"N5"},
+{kanji:"口",hanviet:"KHẨU",on:"こう、く",kun:"くち",meaning:"miệng",level:"N5"},
+{kanji:"校",hanviet:"HIỆU",on:"こう",kun:"—",meaning:"trường",level:"N5"},
+{kanji:"語",hanviet:"NGỮ",on:"ご",kun:"かた（る）",meaning:"từ ngữ",level:"N5"},
+{kanji:"午",hanviet:"NGỌ",on:"ご",kun:"—",meaning:"trưa, 12 giờ",level:"N5"},
+{kanji:"後",hanviet:"HẬU",on:"ご、こう",kun:"あと、のち",meaning:"sau, phía sau",level:"N5"},
+{kanji:"五",hanviet:"NGŨ",on:"ご",kun:"いつ（つ）",meaning:"năm (số 5)",level:"N5"},
+{kanji:"古",hanviet:"CỔ",on:"こ",kun:"ふる（い）",meaning:"cũ, cổ, xưa",level:"N5"},
+{kanji:"言",hanviet:"NGÔN",on:"げん、ごん",kun:"い（う）",meaning:"nói, ngôn ngữ",level:"N5"},
+{kanji:"見",hanviet:"KIẾN",on:"けん",kun:"み（る）",meaning:"nhìn, xem",level:"N5"},
+{kanji:"月",hanviet:"NGUYỆT",on:"げつ、がつ",kun:"つき",meaning:"tháng, mặt trăng",level:"N5"},
+{kanji:"空",hanviet:"KHÔNG",on:"くう",kun:"そら",meaning:"bầu trời",level:"N5"},
+{kanji:"金",hanviet:"KIM",on:"きん、こん",kun:"かね",meaning:"vàng, tiền",level:"N5"},
+{kanji:"魚",hanviet:"NGƯ",on:"ぎょう",kun:"さかな、うお",meaning:"con cá",level:"N5"},
+{kanji:"休",hanviet:"HƯU",on:"きゅう",kun:"やす（む）",meaning:"nghỉ ngơi",level:"N5"},
+{kanji:"九",hanviet:"CỬU",on:"きゅう、く",kun:"ここの（つ）",meaning:"chín",level:"N5"},
+{kanji:"気",hanviet:"KHÍ",on:"き、け",kun:"—",meaning:"tinh thần, tâm trạng",level:"N5"},
+{kanji:"間",hanviet:"GIAN",on:"かん、けん",kun:"あいだ",meaning:"trong khoảng, ở giữa",level:"N5"},
+{kanji:"学",hanviet:"HỌC",on:"がく",kun:"まな（ぶ）",meaning:"học tập",level:"N5"},
+{kanji:"外",hanviet:"NGOẠI",on:"がい、げ",kun:"そと、ほか",meaning:"bên ngoài",level:"N5"},
+// ===== N4 =====
+{kanji:"力",hanviet:"LỰC",on:"リョク、リキ",kun:"ちから",meaning:"sức mạnh",level:"N4"},
+{kanji:"工",hanviet:"CÔNG",on:"コウ、ク",kun:"—",meaning:"công sức",level:"N4"},
+{kanji:"元",hanviet:"NGUYÊN",on:"ゲン、ガン",kun:"もと",meaning:"nguồn gốc",level:"N4"},
+{kanji:"止",hanviet:"CHỈ",on:"シ",kun:"と（まる）",meaning:"dừng lại",level:"N4"},
+{kanji:"引",hanviet:"DẪN",on:"イン",kun:"ひ（く）",meaning:"kéo, dẫn",level:"N4"},
+{kanji:"牛",hanviet:"NGƯU",on:"ギュウ",kun:"うし",meaning:"con trâu, bò",level:"N4"},
+{kanji:"犬",hanviet:"KHUYỂN",on:"ケン",kun:"いぬ",meaning:"con chó",level:"N4"},
+{kanji:"不",hanviet:"BẤT",on:"フ、ブ",kun:"—",meaning:"không",level:"N4"},
+{kanji:"文",hanviet:"VĂN",on:"ブン、モン",kun:"ふみ",meaning:"văn học",level:"N4"},
+{kanji:"方",hanviet:"PHƯƠNG",on:"ホウ",kun:"かた",meaning:"phương hướng",level:"N4"},
+{kanji:"心",hanviet:"TÂM",on:"シン",kun:"こころ",meaning:"trái tim",level:"N4"},
+{kanji:"切",hanviet:"THIẾT",on:"セツ、サイ",kun:"き（る）",meaning:"cắt, đứt",level:"N4"},
+{kanji:"代",hanviet:"ĐẠI",on:"ダイ、タイ",kun:"か（わる）",meaning:"đại diện, thay thế",level:"N4"},
+{kanji:"世",hanviet:"THẾ",on:"セイ、セ",kun:"よ",meaning:"thế giới",level:"N4"},
+{kanji:"正",hanviet:"CHÍNH",on:"セイ、ショウ",kun:"ただ（しい）",meaning:"đúng",level:"N4"},
+{kanji:"田",hanviet:"ĐIỀN",on:"デン",kun:"た",meaning:"ruộng",level:"N4"},
+{kanji:"冬",hanviet:"ĐÔNG",on:"トウ",kun:"ふゆ",meaning:"mùa đông",level:"N4"},
+{kanji:"兄",hanviet:"HUYNH",on:"ケイ、キョウ",kun:"あに",meaning:"anh trai",level:"N4"},
+{kanji:"用",hanviet:"DỤNG",on:"よう",kun:"—",meaning:"sử dụng",level:"N4"},
+{kanji:"去",hanviet:"KHỨ",on:"キョ、コ",kun:"さ（る）",meaning:"quá khứ",level:"N4"},
+{kanji:"市",hanviet:"THỊ",on:"シ",kun:"いち",meaning:"thành thị",level:"N4"},
+{kanji:"広",hanviet:"QUẢNG",on:"コウ",kun:"ひろ（い）",meaning:"rộng",level:"N4"},
+{kanji:"主",hanviet:"CHỦ",on:"シュ、ス",kun:"ぬし、おも",meaning:"chủ nhân",level:"N4"},
+{kanji:"字",hanviet:"TỰ",on:"ジ",kun:"あざ",meaning:"chữ",level:"N4"},
+{kanji:"考",hanviet:"KHẢO",on:"コウ",kun:"かんが（える）",meaning:"suy nghĩ",level:"N4"},
+{kanji:"光",hanviet:"QUANG",on:"コウ",kun:"ひか（る）",meaning:"ánh sáng",level:"N4"},
+{kanji:"好",hanviet:"HẢO",on:"コウ",kun:"この（む）",meaning:"thích",level:"N4"},
+{kanji:"有",hanviet:"HỮU",on:"ユウ、ウ",kun:"あ（る）",meaning:"có",level:"N4"},
+{kanji:"同",hanviet:"ĐỒNG",on:"ドウ",kun:"おな（じ）",meaning:"cùng",level:"N4"},
+{kanji:"肉",hanviet:"NHỤC",on:"ニク",kun:"—",meaning:"thịt",level:"N4"},
+{kanji:"色",hanviet:"SẮC",on:"ショク、シキ",kun:"いろ",meaning:"màu sắc",level:"N4"},
+{kanji:"早",hanviet:"TẢO",on:"ソウ",kun:"はや（い）",meaning:"sớm",level:"N4"},
+{kanji:"地",hanviet:"ĐỊA",on:"チ、ジ",kun:"—",meaning:"đất",level:"N4"},
+{kanji:"村",hanviet:"THÔN",on:"ソン",kun:"むら",meaning:"làng",level:"N4"},
+{kanji:"体",hanviet:"THỂ",on:"タイ",kun:"からだ",meaning:"cơ thể",level:"N4"},
+{kanji:"低",hanviet:"ĐÊ",on:"テイ",kun:"ひく（い）",meaning:"thấp",level:"N4"},
+{kanji:"弟",hanviet:"ĐỆ",on:"テイ、ダイ",kun:"おとうと",meaning:"em trai",level:"N4"},
+{kanji:"走",hanviet:"TẨU",on:"ソウ",kun:"はし（る）",meaning:"chạy",level:"N4"},
+{kanji:"赤",hanviet:"XÍCH",on:"セキ",kun:"あか（い）",meaning:"màu đỏ",level:"N4"},
+{kanji:"売",hanviet:"MẠI",on:"バイ",kun:"う（る）",meaning:"bán",level:"N4"},
+{kanji:"別",hanviet:"BIỆT",on:"ベツ",kun:"わか（れる）",meaning:"riêng biệt",level:"N4"},
+{kanji:"医",hanviet:"Y",on:"イ",kun:"い（やす）",meaning:"y học",level:"N4"},
+{kanji:"近",hanviet:"CẬN",on:"キン、コン",kun:"ちか（い）",meaning:"gần",level:"N4"},
+{kanji:"私",hanviet:"TƯ",on:"シ",kun:"わたし",meaning:"tôi",level:"N4"},
+{kanji:"作",hanviet:"TÁC",on:"サク、サ",kun:"つく（る）",meaning:"làm",level:"N4"},
+{kanji:"者",hanviet:"GIẢ",on:"シャ",kun:"もの",meaning:"người",level:"N4"},
+{kanji:"事",hanviet:"SỰ",on:"ジ",kun:"こと",meaning:"công việc",level:"N4"},
+{kanji:"使",hanviet:"SỬ",on:"シ",kun:"つか（う）",meaning:"sử dụng",level:"N4"},
+{kanji:"始",hanviet:"THỦY",on:"シ",kun:"はじ（める）",meaning:"bắt đầu",level:"N4"},
+{kanji:"姉",hanviet:"TỈ",on:"シ",kun:"あね",meaning:"chị gái",level:"N4"},
+{kanji:"妹",hanviet:"MUỘI",on:"マイ",kun:"いもうと",meaning:"em gái",level:"N4"},
+{kanji:"味",hanviet:"VỊ",on:"ミ",kun:"あじ",meaning:"mùi vị",level:"N4"},
+{kanji:"服",hanviet:"PHỤC",on:"フク",kun:"—",meaning:"trang phục",level:"N4"},
+{kanji:"物",hanviet:"VẬT",on:"ブツ",kun:"もの",meaning:"đồ vật",level:"N4"},
+{kanji:"歩",hanviet:"BỘ",on:"ホ、ブ",kun:"ある（く）",meaning:"đi bộ",level:"N4"},
+{kanji:"門",hanviet:"MÔN",on:"モン",kun:"かど",meaning:"cổng, cửa",level:"N4"},
+{kanji:"夜",hanviet:"DẠ",on:"ヤ",kun:"よ、よる",meaning:"đêm",level:"N4"},
+{kanji:"明",hanviet:"MINH",on:"メイ、ミョウ",kun:"あか（るい）",meaning:"ánh sáng, sáng",level:"N4"},
+{kanji:"林",hanviet:"LÂM",on:"リン",kun:"はやし",meaning:"rừng thưa",level:"N4"},
+{kanji:"青",hanviet:"THANH",on:"セイ",kun:"あお（い）",meaning:"màu xanh",level:"N4"},
+{kanji:"注",hanviet:"CHÚ",on:"チュウ",kun:"そそ（ぐ）",meaning:"ghi chú",level:"N4"},
+{kanji:"知",hanviet:"TRI",on:"チ",kun:"し（る）",meaning:"biết",level:"N4"},
+{kanji:"昼",hanviet:"TRÚ",on:"チュウ",kun:"ひる",meaning:"buổi trưa",level:"N4"},
+{kanji:"茶",hanviet:"TRÀ",on:"チャ、サ",kun:"—",meaning:"trà",level:"N4"},
+{kanji:"待",hanviet:"ĐÃI",on:"タイ",kun:"ま（つ）",meaning:"chờ đợi",level:"N4"},
+{kanji:"送",hanviet:"TỐNG",on:"ソウ",kun:"おく（る）",meaning:"gửi đi",level:"N4"},
+{kanji:"海",hanviet:"HẢI",on:"カイ",kun:"うみ",meaning:"biển",level:"N4"},
+{kanji:"音",hanviet:"ÂM",on:"オン、イン",kun:"おと",meaning:"âm thanh",level:"N4"},
+{kanji:"急",hanviet:"CẤP",on:"キュウ",kun:"いそ（ぐ）",meaning:"gấp",level:"N4"},
+{kanji:"計",hanviet:"KẾ",on:"ケイ",kun:"はか（る）",meaning:"dụng cụ đo",level:"N4"},
+{kanji:"建",hanviet:"KIẾN",on:"ケン",kun:"た（てる）",meaning:"xây dựng",level:"N4"},
+{kanji:"県",hanviet:"HUYỆN",on:"ケン",kun:"—",meaning:"tỉnh",level:"N4"},
+{kanji:"思",hanviet:"TƯ",on:"シ",kun:"おも（う）",meaning:"suy nghĩ",level:"N4"},
+{kanji:"乗",hanviet:"THỪA",on:"ジョウ",kun:"の（る）",meaning:"lên xe",level:"N4"},
+{kanji:"重",hanviet:"TRỌNG",on:"ジュウ",kun:"おも（い）",meaning:"nặng",level:"N4"},
+{kanji:"春",hanviet:"XUÂN",on:"シュン",kun:"はる",meaning:"mùa xuân",level:"N4"},
+{kanji:"秋",hanviet:"THU",on:"シュウ",kun:"あき",meaning:"mùa thu",level:"N4"},
+{kanji:"弱",hanviet:"NHƯỢC",on:"ジャク",kun:"よわ（い）",meaning:"yếu",level:"N4"},
+{kanji:"紙",hanviet:"CHỈ",on:"シ",kun:"かみ",meaning:"tờ giấy",level:"N4"},
+{kanji:"帰",hanviet:"QUY",on:"キ",kun:"かえ（る）",meaning:"trở về",level:"N4"},
+{kanji:"起",hanviet:"KHỞI",on:"キ",kun:"お（きる）",meaning:"thức dậy",level:"N4"},
+{kanji:"夏",hanviet:"HẠ",on:"カ",kun:"なつ",meaning:"mùa hè",level:"N4"},
+{kanji:"家",hanviet:"GIA",on:"カ、ケ",kun:"いえ",meaning:"nhà",level:"N4"},
+{kanji:"病",hanviet:"BỆNH",on:"ビョウ",kun:"や（む）",meaning:"ốm đau",level:"N4"},
+{kanji:"特",hanviet:"ĐẶC",on:"トク",kun:"—",meaning:"đặc biệt",level:"N4"},
+{kanji:"旅",hanviet:"LỮ",on:"リョ",kun:"たび",meaning:"du lịch",level:"N4"},
+{kanji:"通",hanviet:"THÔNG",on:"ツウ",kun:"とお（る）",meaning:"đi qua",level:"N4"},
+{kanji:"鳥",hanviet:"ĐIỂU",on:"チョウ",kun:"とり",meaning:"chim",level:"N4"},
+{kanji:"動",hanviet:"ĐỘNG",on:"ドウ",kun:"うご（く）",meaning:"chuyển động",level:"N4"},
+{kanji:"強",hanviet:"CƯỜNG",on:"キョウ",kun:"つよ（い）",meaning:"mạnh",level:"N4"},
+{kanji:"教",hanviet:"GIÁO",on:"キョウ",kun:"おし（える）",meaning:"dạy",level:"N4"},
+{kanji:"黒",hanviet:"HẮC",on:"コク",kun:"くろ（い）",meaning:"màu đen",level:"N4"},
+{kanji:"終",hanviet:"CHUNG",on:"シュウ",kun:"お（わる）",meaning:"kết thúc",level:"N4"},
+{kanji:"習",hanviet:"TẬP",on:"シュウ",kun:"なら（う）",meaning:"học tập",level:"N4"},
+{kanji:"寒",hanviet:"HÀN",on:"カン",kun:"さむ（い）",meaning:"lạnh",level:"N4"},
+{kanji:"軽",hanviet:"KHINH",on:"ケイ",kun:"かる（い）",meaning:"nhẹ",level:"N4"},
+{kanji:"運",hanviet:"VẬN",on:"ウン",kun:"はこ（ぶ）",meaning:"vận chuyển",level:"N4"},
+{kanji:"開",hanviet:"KHAI",on:"カイ",kun:"あ（く）",meaning:"mở",level:"N4"},
+{kanji:"飯",hanviet:"PHẠN",on:"ハン",kun:"めし",meaning:"cơm",level:"N4"},
+{kanji:"答",hanviet:"ĐÁP",on:"トウ",kun:"こた（える）",meaning:"trả lời",level:"N4"},
+{kanji:"森",hanviet:"LÂM",on:"シン",kun:"もり",meaning:"rừng rậm",level:"N4"},
+{kanji:"暑",hanviet:"THỬ",on:"ショ",kun:"あつ（い）",meaning:"nóng",level:"N4"},
+{kanji:"着",hanviet:"TRƯỚC",on:"チャク",kun:"き（る）、つ（く）",meaning:"đến, mặc",level:"N4"},
+{kanji:"短",hanviet:"ĐOẢN",on:"タン",kun:"みじか（い）",meaning:"ngắn",level:"N4"},
+{kanji:"楽",hanviet:"LẠC",on:"ガク、ラク",kun:"たの（しい）",meaning:"vui vẻ",level:"N4"},
+{kanji:"暗",hanviet:"ÁM",on:"アン",kun:"くら（い）",meaning:"tối",level:"N4"},
+{kanji:"遠",hanviet:"VIỄN",on:"エン",kun:"とお（い）",meaning:"xa",level:"N4"},
+{kanji:"漢",hanviet:"HÁN",on:"カン",kun:"—",meaning:"chữ hán",level:"N4"},
+{kanji:"試",hanviet:"THÍ",on:"シ",kun:"ため（す）",meaning:"thử nghiệm",level:"N4"},
+{kanji:"銀",hanviet:"NGÂN",on:"ギン",kun:"しろがね",meaning:"bạc",level:"N4"},
+{kanji:"歌",hanviet:"CA",on:"カ",kun:"うた",meaning:"hát",level:"N4"},
+{kanji:"館",hanviet:"QUÁN",on:"カン",kun:"やかた",meaning:"hội quán",level:"N4"},
+{kanji:"親",hanviet:"THÂN",on:"シン",kun:"おや",meaning:"thân thiết",level:"N4"},
+{kanji:"頭",hanviet:"ĐẦU",on:"トウ、ズ",kun:"あたま",meaning:"đầu",level:"N4"},
+{kanji:"薬",hanviet:"DƯỢC",on:"ヤク",kun:"くすり",meaning:"thuốc",level:"N4"},
+{kanji:"顔",hanviet:"NHAN",on:"ガン",kun:"かお",meaning:"khuôn mặt",level:"N4"},
+// ===== N1 =====
+{kanji:"亜",hanviet:"Á",on:"ア",kun:"—",meaning:"Á (châu Á), thứ hai",level:"N1"},
+{kanji:"哀",hanviet:"AI",on:"アイ",kun:"あわ（れ）",meaning:"buồn, thương",level:"N1"},
+{kanji:"挨",hanviet:"AI",on:"アイ",kun:"—",meaning:"tiếp cận, chào hỏi",level:"N1"},
+{kanji:"宛",hanviet:"UYỂN",on:"エン",kun:"あ（てる）",meaning:"gửi đến",level:"N1"},
+{kanji:"尉",hanviet:"ÚY",on:"イ",kun:"—",meaning:"cấp bậc quân sự",level:"N1"},
+{kanji:"茨",hanviet:"TỬ",on:"—",kun:"いばら",meaning:"gai",level:"N1"},
+{kanji:"咽",hanviet:"YẾT",on:"イン",kun:"むせ（る）",meaning:"nghẹn, cổ họng",level:"N1"},
+{kanji:"淫",hanviet:"DÂM",on:"イン",kun:"みだ（ら）",meaning:"dâm, phóng túng",level:"N1"},
+{kanji:"曖",hanviet:"ÁI",on:"アイ",kun:"—",meaning:"mơ hồ, không rõ ràng",level:"N1"},
+{kanji:"握",hanviet:"ÁC",on:"アク",kun:"にぎ（る）",meaning:"nắm, cầm",level:"N1"},
+{kanji:"扱",hanviet:"XỬ",on:"—",kun:"あつか（う）",meaning:"xử lý, đối xử",level:"N1"},
+{kanji:"嵐",hanviet:"LAM",on:"ラン",kun:"あらし",meaning:"bão",level:"N1"},
+{kanji:"威",hanviet:"UY",on:"イ",kun:"—",meaning:"uy lực, oai",level:"N1"},
+{kanji:"為",hanviet:"VI",on:"イ",kun:"ため",meaning:"vì, do",level:"N1"},
+{kanji:"畏",hanviet:"ÚY",on:"イ",kun:"おそ（れる）",meaning:"sợ hãi, kính sợ",level:"N1"},
+{kanji:"逸",hanviet:"DẬT",on:"イツ",kun:"そ（れる）",meaning:"lệch, xuất sắc",level:"N1"},
+{kanji:"芋",hanviet:"DỤ",on:"ウ",kun:"いも",meaning:"khoai",level:"N1"},
+{kanji:"陰",hanviet:"ÂM",on:"イン",kun:"かげ",meaning:"bóng, âm",level:"N1"},
+{kanji:"隠",hanviet:"ẨN",on:"イン",kun:"かく（す）",meaning:"giấu, ẩn",level:"N1"},
+{kanji:"韻",hanviet:"VẬN",on:"イン",kun:"—",meaning:"vần, âm vận",level:"N1"},
+{kanji:"疫",hanviet:"DỊCH",on:"エキ",kun:"—",meaning:"dịch bệnh",level:"N1"},
+{kanji:"悦",hanviet:"DUYỆT",on:"エツ",kun:"よろこ（ぶ）",meaning:"vui mừng",level:"N1"},
+{kanji:"閲",hanviet:"DUYỆT",on:"エツ",kun:"—",meaning:"duyệt, kiểm tra",level:"N1"},
+{kanji:"炎",hanviet:"VIÊM",on:"エン",kun:"ほのお",meaning:"ngọn lửa, viêm",level:"N1"},
+{kanji:"猿",hanviet:"VIÊN",on:"エン",kun:"さる",meaning:"khỉ",level:"N1"},
+{kanji:"鉛",hanviet:"DUYÊN",on:"エン",kun:"なまり",meaning:"chì (kim loại)",level:"N1"},
+{kanji:"縁",hanviet:"DUYÊN",on:"エン",kun:"ふち",meaning:"duyên, mối quan hệ",level:"N1"},
+{kanji:"凹",hanviet:"AO",on:"オウ",kun:"へこ（む）",meaning:"lõm",level:"N1"},
+{kanji:"旺",hanviet:"VƯỢNG",on:"オウ",kun:"—",meaning:"thịnh vượng",level:"N1"},
+{kanji:"殴",hanviet:"ÂU",on:"オウ",kun:"なぐ（る）",meaning:"đánh, đấm",level:"N1"},
+{kanji:"翁",hanviet:"ÔNG",on:"オウ",kun:"おきな",meaning:"ông lão",level:"N1"},
+{kanji:"襲",hanviet:"TẬP",on:"シュウ",kun:"おそ（う）",meaning:"tấn công, tập kích",level:"N1"},
+{kanji:"斧",hanviet:"PHỦ",on:"フ",kun:"おの",meaning:"cái rìu",level:"N1"},
+{kanji:"恩",hanviet:"ÂN",on:"オン",kun:"—",meaning:"ân huệ, ơn",level:"N1"},
+{kanji:"穏",hanviet:"ỔN",on:"オン",kun:"おだ（やか）",meaning:"yên ổn, bình thản",level:"N1"},
+{kanji:"佳",hanviet:"GIA",on:"カ",kun:"—",meaning:"tốt đẹp, xinh",level:"N1"},
+{kanji:"嫁",hanviet:"GIÁ",on:"カ",kun:"とつ（ぐ）",meaning:"lấy chồng, nàng dâu",level:"N1"},
+{kanji:"稼",hanviet:"GIÁ",on:"カ",kun:"かせ（ぐ）",meaning:"kiếm tiền, trồng trọt",level:"N1"},
+{kanji:"蚊",hanviet:"VĂN",on:"ブン",kun:"か",meaning:"muỗi",level:"N1"},
+{kanji:"雅",hanviet:"NHÃ",on:"ガ",kun:"みや（び）",meaning:"tao nhã, thanh lịch",level:"N1"},
+{kanji:"介",hanviet:"GIỚI",on:"カイ",kun:"—",meaning:"giới thiệu, cõi",level:"N1"},
+{kanji:"壊",hanviet:"HOẠI",on:"カイ",kun:"こわ（す）",meaning:"phá hủy, hỏng",level:"N1"},
+{kanji:"懐",hanviet:"HOÀI",on:"カイ",kun:"ふところ",meaning:"lòng, túi áo",level:"N1"},
+{kanji:"獲",hanviet:"HOẠCH",on:"カク",kun:"え（る）",meaning:"săn bắt, thu được",level:"N1"},
+{kanji:"穫",hanviet:"HOẠCH",on:"カク",kun:"—",meaning:"thu hoạch",level:"N1"},
+{kanji:"渇",hanviet:"KHÁ",on:"カツ",kun:"かわ（く）",meaning:"khát, khô",level:"N1"},
+{kanji:"喝",hanviet:"KHÁT",on:"カツ",kun:"—",meaning:"quát, la hét",level:"N1"},
+{kanji:"滑",hanviet:"HOẠT",on:"カツ",kun:"すべ（る）",meaning:"trơn, trượt",level:"N1"},
+{kanji:"轄",hanviet:"HẠT",on:"カツ",kun:"—",meaning:"quản hạt",level:"N1"},
+{kanji:"叶",hanviet:"HIỆP",on:"—",kun:"かな（う）",meaning:"thành sự thật, phù hợp",level:"N1"},
+{kanji:"株",hanviet:"CHU",on:"—",kun:"かぶ",meaning:"cổ phiếu, gốc cây",level:"N1"},
+{kanji:"釜",hanviet:"PHỦ",on:"フ",kun:"かま",meaning:"nồi, vạc",level:"N1"},
+{kanji:"鎌",hanviet:"LIÊM",on:"レン",kun:"かま",meaning:"lưỡi liềm",level:"N1"},
+{kanji:"嚙",hanviet:"GIẢO",on:"—",kun:"か（む）",meaning:"cắn, nhai",level:"N1"},
+{kanji:"冠",hanviet:"QUAN",on:"カン",kun:"かんむり",meaning:"vương miện, mũ miện",level:"N1"},
+{kanji:"勘",hanviet:"KHÁM",on:"カン",kun:"—",meaning:"trực giác, khám phá",level:"N1"},
+{kanji:"堪",hanviet:"KHAM",on:"カン",kun:"た（える）",meaning:"chịu đựng",level:"N1"},
+{kanji:"寛",hanviet:"KHOAN",on:"カン",kun:"ひろ（い）",meaning:"khoan dung, rộng rãi",level:"N1"},
+{kanji:"憾",hanviet:"HÀM",on:"カン",kun:"うら（む）",meaning:"hối tiếc, oán",level:"N1"},
+{kanji:"敢",hanviet:"CẢM",on:"カン",kun:"—",meaning:"dám, dũng cảm",level:"N1"},
+{kanji:"甘",hanviet:"CAM",on:"カン",kun:"あま（い）",meaning:"ngọt ngào",level:"N1"},
+{kanji:"肝",hanviet:"CAN",on:"カン",kun:"きも",meaning:"gan, can đảm",level:"N1"},
+{kanji:"棺",hanviet:"QUAN",on:"カン",kun:"—",meaning:"quan tài",level:"N1"},
+{kanji:"歓",hanviet:"HOAN",on:"カン",kun:"—",meaning:"vui mừng, hoan hỉ",level:"N1"},
+{kanji:"漢",hanviet:"HÁN",on:"カン",kun:"—",meaning:"người Hán, đàn ông",level:"N1"},
+{kanji:"緩",hanviet:"HOÃN",on:"カン",kun:"ゆる（い）",meaning:"lỏng lẻo, chậm",level:"N1"},
+{kanji:"艦",hanviet:"HẠM",on:"カン",kun:"—",meaning:"tàu chiến",level:"N1"},
+{kanji:"鑑",hanviet:"GIÁM",on:"カン",kun:"かがみ",meaning:"gương soi, giám định",level:"N1"},
+{kanji:"頑",hanviet:"NGOAN",on:"ガン",kun:"かたく（な）",meaning:"ngoan cố, bướng bỉnh",level:"N1"},
+{kanji:"企",hanviet:"XÍ",on:"キ",kun:"くわだ（てる）",meaning:"mưu tính, dự án",level:"N1"},
+{kanji:"棄",hanviet:"KHÍ",on:"キ",kun:"す（てる）",meaning:"bỏ, vứt bỏ",level:"N1"},
+{kanji:"欺",hanviet:"Khi",on:"ギ",kun:"あざむ（く）",meaning:"lừa dối",level:"N1"},
+{kanji:"騎",hanviet:"KỲ",on:"キ",kun:"—",meaning:"cưỡi ngựa",level:"N1"},
+{kanji:"宜",hanviet:"NGHI",on:"ギ",kun:"よろ（しい）",meaning:"thích hợp",level:"N1"},
+{kanji:"偽",hanviet:"NGỤY",on:"ギ",kun:"いつわ（る）",meaning:"giả mạo",level:"N1"},
+{kanji:"犠",hanviet:"HI",on:"ギ",kun:"—",meaning:"hi sinh",level:"N1"},
+{kanji:"菊",hanviet:"CÚC",on:"キク",kun:"—",meaning:"hoa cúc",level:"N1"},
+{kanji:"吉",hanviet:"CÁT",on:"キチ",kun:"—",meaning:"tốt lành, may mắn",level:"N1"},
+{kanji:"喫",hanviet:"KHIẾT",on:"キツ",kun:"—",meaning:"ăn uống",level:"N1"},
+{kanji:"虐",hanviet:"NGƯỢC",on:"ギャク",kun:"しいた（げる）",meaning:"ngược đãi, tàn bạo",level:"N1"},
+{kanji:"脚",hanviet:"CƯỚC",on:"キャク",kun:"あし",meaning:"chân, cước",level:"N1"},
+{kanji:"却",hanviet:"KHƯỚC",on:"キャク",kun:"しりぞ（く）",meaning:"bác bỏ, rút lui",level:"N1"},
+{kanji:"矯",hanviet:"KIỀU",on:"キョウ",kun:"た（める）",meaning:"uốn nắn, sửa chữa",level:"N1"},
+{kanji:"凶",hanviet:"HUNG",on:"キョウ",kun:"—",meaning:"hung dữ, hung ác",level:"N1"},
+{kanji:"享",hanviet:"HƯỞNG",on:"キョウ",kun:"—",meaning:"hưởng thụ",level:"N1"},
+{kanji:"恭",hanviet:"CUNG",on:"キョウ",kun:"うやうや（しい）",meaning:"cung kính",level:"N1"},
+{kanji:"挟",hanviet:"HIỆP",on:"キョウ",kun:"はさ（む）",meaning:"kẹp vào",level:"N1"},
+{kanji:"脅",hanviet:"HIẾP",on:"キョウ",kun:"おびや（かす）",meaning:"đe dọa, uy hiếp",level:"N1"},
+{kanji:"仰",hanviet:"NGƯỠNG",on:"ギョウ",kun:"あお（ぐ）",meaning:"ngưỡng mộ, ngẩng lên",level:"N1"},
+{kanji:"暁",hanviet:"HIỂU",on:"ギョウ",kun:"あかつき",meaning:"bình minh, hiểu rõ",level:"N1"},
+{kanji:"玩",hanviet:"NGOẠN",on:"ガン",kun:"もてあそ（ぶ）",meaning:"đồ chơi, thưởng thức",level:"N1"},
+{kanji:"緊",hanviet:"KHẨN",on:"キン",kun:"—",meaning:"khẩn cấp, căng thẳng",level:"N1"},
+{kanji:"謹",hanviet:"CẨN",on:"キン",kun:"つつし（む）",meaning:"cẩn thận, thành kính",level:"N1"},
+{kanji:"吟",hanviet:"NGÂM",on:"ギン",kun:"—",meaning:"ngâm thơ",level:"N1"},
+{kanji:"駆",hanviet:"KHU",on:"ク",kun:"か（ける）",meaning:"phóng, đuổi",level:"N1"},
+{kanji:"愚",hanviet:"NGU",on:"グ",kun:"おろ（か）",meaning:"ngu ngốc",level:"N1"},
+{kanji:"偶",hanviet:"NGẪU",on:"グウ",kun:"たま（たま）",meaning:"ngẫu nhiên, tình cờ",level:"N1"},
+{kanji:"串",hanviet:"XUYÊN",on:"—",kun:"くし",meaning:"xiên que",level:"N1"},
+{kanji:"屈",hanviet:"KHUẤT",on:"クツ",kun:"かが（む）",meaning:"cúi, khuất phục",level:"N1"},
+{kanji:"掘",hanviet:"QUẬT",on:"クツ",kun:"ほ（る）",meaning:"đào bới",level:"N1"},
+{kanji:"窟",hanviet:"QUẬT",on:"クツ",kun:"—",meaning:"hang động",level:"N1"},
+{kanji:"繰",hanviet:"TÁO",on:"ソウ",kun:"く（る）",meaning:"quay, cuộn",level:"N1"},
+{kanji:"傾",hanviet:"KHUYNH",on:"ケイ",kun:"かたむ（く）",meaning:"nghiêng, khuynh hướng",level:"N1"},
+{kanji:"携",hanviet:"HUỀ",on:"ケイ",kun:"たずさ（える）",meaning:"mang theo, liên kết",level:"N1"},
+{kanji:"掲",hanviet:"KIẾT",on:"ケイ",kun:"かか（げる）",meaning:"treo lên, đăng",level:"N1"},
+{kanji:"渓",hanviet:"KHÊ",on:"ケイ",kun:"たに",meaning:"khe suối",level:"N1"},
+{kanji:"茎",hanviet:"KINH",on:"ケイ",kun:"くき",meaning:"thân cây",level:"N1"},
+{kanji:"遣",hanviet:"KHIỂN",on:"ケン",kun:"つか（う）",meaning:"sai khiến, phái đi",level:"N1"},
+{kanji:"献",hanviet:"HIẾN",on:"ケン",kun:"—",meaning:"cống hiến, hiến tặng",level:"N1"},
+{kanji:"顕",hanviet:"HIỂN",on:"ケン",kun:"あらわ（れる）",meaning:"hiển hiện, rõ ràng",level:"N1"},
+{kanji:"懸",hanviet:"HUYỀN",on:"ケン",kun:"か（ける）",meaning:"treo lơ lửng, quan tâm",level:"N1"},
+{kanji:"峻",hanviet:"TUẤN",on:"シュン",kun:"—",meaning:"dốc đứng, nghiêm khắc",level:"N1"},
+{kanji:"倹",hanviet:"KIỆM",on:"ケン",kun:"—",meaning:"tiết kiệm",level:"N1"},
+{kanji:"剣",hanviet:"KIẾM",on:"ケン",kun:"つるぎ",meaning:"kiếm",level:"N1"},
+{kanji:"兼",hanviet:"KIÊM",on:"ケン",kun:"か（ねる）",meaning:"kiêm, kiêm nhiệm",level:"N1"},
+{kanji:"嫌",hanviet:"HIỀM",on:"ケン",kun:"きら（う）",meaning:"ghét, không thích",level:"N1"},
+{kanji:"虎",hanviet:"HỔ",on:"コ",kun:"とら",meaning:"hổ, cọp",level:"N1"},
+{kanji:"孤",hanviet:"CÔ",on:"コ",kun:"—",meaning:"cô đơn, mồ côi",level:"N1"},
+{kanji:"己",hanviet:"KỶ",on:"コ、キ",kun:"おのれ",meaning:"bản thân, mình",level:"N1"},
+{kanji:"弧",hanviet:"HỒ",on:"コ",kun:"—",meaning:"cung tròn",level:"N1"},
+{kanji:"枯",hanviet:"KHÔ",on:"コ",kun:"か（れる）",meaning:"khô héo",level:"N1"},
+{kanji:"鼓",hanviet:"CỔ",on:"コ",kun:"つづみ",meaning:"trống",level:"N1"},
+{kanji:"誇",hanviet:"KHO",on:"コ",kun:"ほこ（る）",meaning:"kiêu hãnh, tự hào",level:"N1"},
+{kanji:"顧",hanviet:"CỐ",on:"コ",kun:"かえり（みる）",meaning:"nhìn lại, quan tâm",level:"N1"},
+{kanji:"碁",hanviet:"KỲ",on:"ゴ",kun:"—",meaning:"cờ vây",level:"N1"},
+{kanji:"悟",hanviet:"NGỘ",on:"ゴ",kun:"さと（る）",meaning:"giác ngộ, hiểu ra",level:"N1"},
+{kanji:"坑",hanviet:"KHANH",on:"コウ",kun:"—",meaning:"hầm, mỏ",level:"N1"},
+{kanji:"拘",hanviet:"CÂU",on:"コウ",kun:"こだわ（る）",meaning:"giam giữ, câu nệ",level:"N1"},
+{kanji:"控",hanviet:"KHỐNG",on:"コウ",kun:"ひか（える）",meaning:"kìm hãm, giữ lại",level:"N1"},
+{kanji:"豪",hanviet:"HÀO",on:"ゴウ",kun:"—",meaning:"hào phóng, mạnh mẽ",level:"N1"},
+{kanji:"轟",hanviet:"HOẰNG",on:"ゴウ",kun:"とどろ（く）",meaning:"vang dội, ầm ầm",level:"N1"},
+{kanji:"酷",hanviet:"KHỐC",on:"コク",kun:"—",meaning:"tàn nhẫn, khắc nghiệt",level:"N1"},
+{kanji:"獄",hanviet:"NGỤC",on:"ゴク",kun:"—",meaning:"nhà tù, ngục",level:"N1"},
+{kanji:"昏",hanviet:"HÔN",on:"コン",kun:"くら（い）",meaning:"chạng vạng, tối tăm",level:"N1"},
+{kanji:"恨",hanviet:"HẬN",on:"コン",kun:"うら（む）",meaning:"oán hận",level:"N1"},
+{kanji:"墾",hanviet:"KHẨN",on:"コン",kun:"—",meaning:"khai khẩn",level:"N1"},
+{kanji:"魂",hanviet:"HỒN",on:"コン",kun:"たましい",meaning:"linh hồn",level:"N1"},
+{kanji:"唆",hanviet:"TÒA",on:"サ",kun:"そそのか（す）",meaning:"xúi giục",level:"N1"},
+{kanji:"詐",hanviet:"TRÁ",on:"サ",kun:"いつわ（る）",meaning:"lừa đảo",level:"N1"},
+{kanji:"錯",hanviet:"THÁC",on:"サク",kun:"—",meaning:"nhầm lẫn, lẫn lộn",level:"N1"},
+{kanji:"傘",hanviet:"TÁN",on:"サン",kun:"かさ",meaning:"ô, dù",level:"N1"},
+{kanji:"惨",hanviet:"THẢM",on:"サン",kun:"みじ（め）",meaning:"thảm thương, bi thảm",level:"N1"},
+{kanji:"暫",hanviet:"TẠM",on:"ザン",kun:"しばら（く）",meaning:"tạm thời, lát nữa",level:"N1"},
+{kanji:"施",hanviet:"THI",on:"シ",kun:"ほどこ（す）",meaning:"thi hành, bố thí",level:"N1"},
+{kanji:"旨",hanviet:"CHỈ",on:"シ",kun:"むね",meaning:"ý chính, ngon",level:"N1"},
+{kanji:"祉",hanviet:"CHỈ",on:"シ",kun:"—",meaning:"phúc lợi",level:"N1"},
+{kanji:"諮",hanviet:"TƯ",on:"シ",kun:"はか（る）",meaning:"tham vấn, hỏi ý kiến",level:"N1"},
+{kanji:"侍",hanviet:"THỊ",on:"ジ",kun:"さむらい",meaning:"samurai, hầu cận",level:"N1"},
+{kanji:"慈",hanviet:"TỪ",on:"ジ",kun:"いつく（しむ）",meaning:"từ bi, yêu thương",level:"N1"},
+{kanji:"滋",hanviet:"TƯ",on:"ジ",kun:"—",meaning:"bổ dưỡng",level:"N1"},
+{kanji:"璽",hanviet:"TỶ",on:"ジ",kun:"—",meaning:"ấn, con dấu vua",level:"N1"},
+{kanji:"疾",hanviet:"TẬT",on:"シツ",kun:"—",meaning:"bệnh tật, nhanh",level:"N1"},
+{kanji:"嫉",hanviet:"TẬT",on:"シツ",kun:"—",meaning:"ghen tuông",level:"N1"},
+{kanji:"執",hanviet:"CHẤP",on:"シツ",kun:"と（る）",meaning:"chấp, nắm",level:"N1"},
+{kanji:"芝",hanviet:"CHI",on:"—",kun:"しば",meaning:"cỏ, sân cỏ",level:"N1"},
+{kanji:"赦",hanviet:"XÁ",on:"シャ",kun:"ゆる（す）",meaning:"tha thứ, xá",level:"N1"},
+{kanji:"遮",hanviet:"XÁ",on:"シャ",kun:"さえぎ（る）",meaning:"cản trở, che chắn",level:"N1"},
+{kanji:"釈",hanviet:"THÍCH",on:"シャク",kun:"—",meaning:"giải thích, thả ra",level:"N1"},
+{kanji:"朱",hanviet:"CHU",on:"シュ",kun:"あけ",meaning:"màu đỏ son",level:"N1"},
+{kanji:"狩",hanviet:"THÚ",on:"シュ",kun:"か（る）",meaning:"săn bắn",level:"N1"},
+{kanji:"珠",hanviet:"CHU",on:"シュ",kun:"たま",meaning:"ngọc trai",level:"N1"},
+{kanji:"趣",hanviet:"THÚ",on:"シュ",kun:"おもむき",meaning:"thú vị, sở thích",level:"N1"},
+{kanji:"儒",hanviet:"NHO",on:"ジュ",kun:"—",meaning:"nho giáo",level:"N1"},
+{kanji:"樹",hanviet:"THỤ",on:"ジュ",kun:"き",meaning:"cây cối",level:"N1"},
+{kanji:"寿",hanviet:"THỌ",on:"ジュ",kun:"ことぶき",meaning:"thọ, tuổi thọ",level:"N1"},
+{kanji:"呪",hanviet:"CHÚ",on:"ジュ",kun:"のろ（う）",meaning:"nguyền rủa, bùa chú",level:"N1"},
+{kanji:"殊",hanviet:"THÙ",on:"シュ",kun:"こと（に）",meaning:"đặc biệt, khác thường",level:"N1"},
+{kanji:"粛",hanviet:"TÚC",on:"シュク",kun:"—",meaning:"nghiêm trang, thanh trừng",level:"N1"},
+{kanji:"塾",hanviet:"TÚC",on:"ジュク",kun:"—",meaning:"lớp học thêm",level:"N1"},
+{kanji:"循",hanviet:"TUẦN",on:"ジュン",kun:"—",meaning:"tuân thủ, chu kỳ",level:"N1"},
+{kanji:"潤",hanviet:"NHUẬN",on:"ジュン",kun:"うるお（う）",meaning:"ẩm ướt, nhuần nhuyễn",level:"N1"},
+{kanji:"遵",hanviet:"TUÂN",on:"ジュン",kun:"—",meaning:"tuân theo",level:"N1"},
+{kanji:"庶",hanviet:"THỨ",on:"ショ",kun:"—",meaning:"thứ dân, phổ thông",level:"N1"},
+{kanji:"緒",hanviet:"TỰ",on:"ショ",kun:"お",meaning:"đầu mối, khởi đầu",level:"N1"},
+{kanji:"叙",hanviet:"TỰ",on:"ジョ",kun:"—",meaning:"kể, tự truyện",level:"N1"},
+{kanji:"如",hanviet:"NHƯ",on:"ジョ",kun:"ごと（く）",meaning:"như, giống như",level:"N1"},
+{kanji:"尚",hanviet:"THƯỢNG",on:"ショウ",kun:"なお",meaning:"còn hơn, tôn trọng",level:"N1"},
+{kanji:"彰",hanviet:"CHƯƠNG",on:"ショウ",kun:"—",meaning:"biểu dương, rõ ràng",level:"N1"},
+{kanji:"抄",hanviet:"SAO",on:"ショウ",kun:"—",meaning:"sao chép, trích",level:"N1"},
+{kanji:"渉",hanviet:"THIỆP",on:"ショウ",kun:"—",meaning:"liên quan, lội qua",level:"N1"},
+{kanji:"詔",hanviet:"CHIẾU",on:"ショウ",kun:"みことのり",meaning:"chiếu chỉ của vua",level:"N1"},
+{kanji:"償",hanviet:"THƯỜNG",on:"ショウ",kun:"つぐな（う）",meaning:"bồi thường",level:"N1"},
+{kanji:"鐘",hanviet:"CHUNG",on:"ショウ",kun:"かね",meaning:"chuông",level:"N1"},
+{kanji:"丈",hanviet:"TRƯỢNG",on:"ジョウ",kun:"たけ",meaning:"chiều cao, ông lão",level:"N1"},
+{kanji:"冗",hanviet:"NHŨNG",on:"ジョウ",kun:"—",meaning:"thừa, dài dòng",level:"N1"},
+{kanji:"浄",hanviet:"TỊNH",on:"ジョウ",kun:"—",meaning:"trong sạch, thanh tịnh",level:"N1"},
+{kanji:"剰",hanviet:"THẶNG",on:"ジョウ",kun:"あま（る）",meaning:"thặng dư, dư thừa",level:"N1"},
+{kanji:"嬢",hanviet:"NƯƠNG",on:"ジョウ",kun:"—",meaning:"tiểu thư, cô gái",level:"N1"},
+{kanji:"娼",hanviet:"XƯỚNG",on:"ショウ",kun:"—",meaning:"gái điếm",level:"N1"},
+{kanji:"錠",hanviet:"ĐĨNH",on:"ジョウ",kun:"—",meaning:"khóa, viên thuốc",level:"N1"},
+{kanji:"譲",hanviet:"NHƯỢNG",on:"ジョウ",kun:"ゆず（る）",meaning:"nhường, nhượng bộ",level:"N1"},
+{kanji:"辱",hanviet:"NHỤC",on:"ジョク",kun:"はずかし（める）",meaning:"xỉ nhục, nhục nhã",level:"N1"},
+{kanji:"尻",hanviet:"CÚ",on:"—",kun:"しり",meaning:"mông, đít",level:"N1"},
+{kanji:"侵",hanviet:"XÂM",on:"シン",kun:"おか（す）",meaning:"xâm phạm",level:"N1"},
+{kanji:"振",hanviet:"CHẤN",on:"シン",kun:"ふ（る）",meaning:"vẫy, rung",level:"N1"},
+{kanji:"浸",hanviet:"THẤM",on:"シン",kun:"ひた（す）",meaning:"ngâm, thấm",level:"N1"},
+{kanji:"慎",hanviet:"THẬN",on:"シン",kun:"つつし（む）",meaning:"thận trọng",level:"N1"},
+{kanji:"審",hanviet:"THẨM",on:"シン",kun:"—",meaning:"thẩm tra, xét xử",level:"N1"},
+{kanji:"刃",hanviet:"NHẪN",on:"ジン",kun:"は",meaning:"lưỡi dao",level:"N1"},
+{kanji:"迅",hanviet:"TÂN",on:"ジン",kun:"—",meaning:"nhanh, mau lẹ",level:"N1"},
+{kanji:"陣",hanviet:"TRẬN",on:"ジン",kun:"—",meaning:"trận địa, doanh trại",level:"N1"},
+{kanji:"酔",hanviet:"TÚY",on:"スイ",kun:"よ（う）",meaning:"say rượu",level:"N1"},
+{kanji:"衰",hanviet:"SUY",on:"スイ",kun:"おとろ（える）",meaning:"suy yếu",level:"N1"},
+{kanji:"澄",hanviet:"TRỪNG",on:"チョウ",kun:"す（む）",meaning:"trong sáng, lắng",level:"N1"},
+{kanji:"摂",hanviet:"NHIẾP",on:"セツ",kun:"と（る）",meaning:"nhiếp thủ, tiếp thu",level:"N1"},
+{kanji:"潜",hanviet:"TIỀM",on:"セン",kun:"もぐ（る）",meaning:"lặn, tiềm ẩn",level:"N1"},
+{kanji:"繊",hanviet:"TIÊN",on:"セン",kun:"—",meaning:"sợi, mảnh mai",level:"N1"},
+{kanji:"鮮",hanviet:"TIÊN",on:"セン",kun:"あざ（やか）",meaning:"tươi, sống động",level:"N1"},
+{kanji:"遷",hanviet:"THIÊN",on:"セン",kun:"—",meaning:"chuyển dời, dời đô",level:"N1"},
+{kanji:"薦",hanviet:"TIẾN",on:"セン",kun:"すす（める）",meaning:"tiến cử, giới thiệu",level:"N1"},
+{kanji:"疎",hanviet:"SƠ",on:"ソ",kun:"うと（い）",meaning:"xa cách, sơ sài",level:"N1"},
+{kanji:"措",hanviet:"THỐ",on:"ソ",kun:"—",meaning:"biện pháp, xử lý",level:"N1"},
+{kanji:"塑",hanviet:"TÚ",on:"ソ",kun:"—",meaning:"tạo hình, đắp",level:"N1"},
+{kanji:"双",hanviet:"SONG",on:"ソウ",kun:"ふた",meaning:"đôi, cặp",level:"N1"},
+{kanji:"壮",hanviet:"TRÁNG",on:"ソウ",kun:"さか（ん）",meaning:"tráng kiện, hùng mạnh",level:"N1"},
+{kanji:"喪",hanviet:"TANG",on:"ソウ",kun:"も",meaning:"tang lễ, mất mát",level:"N1"},
+{kanji:"葬",hanviet:"TÁNG",on:"ソウ",kun:"ほうむ（る）",meaning:"chôn cất, tang lễ",level:"N1"},
+{kanji:"賊",hanviet:"TẶC",on:"ゾク",kun:"—",meaning:"giặc, tên cướp",level:"N1"},
+{kanji:"促",hanviet:"XÚC",on:"ソク",kun:"うなが（す）",meaning:"thúc đẩy, thúc giục",level:"N1"},
+{kanji:"俗",hanviet:"TỤC",on:"ゾク",kun:"—",meaning:"tục lệ, thế tục",level:"N1"},
+{kanji:"粗",hanviet:"THÔ",on:"ソ",kun:"あら（い）",meaning:"thô ráp, sơ sài",level:"N1"},
+{kanji:"阻",hanviet:"TRỞ",on:"ソ",kun:"はば（む）",meaning:"cản trở",level:"N1"},
+{kanji:"奏",hanviet:"TẤU",on:"ソウ",kun:"かな（でる）",meaning:"tấu nhạc",level:"N1"},
+{kanji:"遭",hanviet:"TÁO",on:"ソウ",kun:"あ（う）",meaning:"gặp phải tai nạn",level:"N1"},
+{kanji:"即",hanviet:"TỨC",on:"ソク",kun:"すなわ（ち）",meaning:"ngay lập tức",level:"N1"},
+{kanji:"粛",hanviet:"TÚC",on:"シュク",kun:"—",meaning:"nghiêm trang",level:"N1"},
+{kanji:"遡",hanviet:"TỐ",on:"ソ",kun:"さかのぼ（る）",meaning:"ngược dòng, truy ngược",level:"N1"},
+{kanji:"汰",hanviet:"THẢI",on:"タ",kun:"—",meaning:"đào thải, lọc",level:"N1"},
+{kanji:"嘆",hanviet:"THÁN",on:"タン",kun:"なげ（く）",meaning:"than thở, thở dài",level:"N1"},
+{kanji:"滞",hanviet:"TRỆ",on:"タイ",kun:"とどこお（る）",meaning:"trì trệ, đình trệ",level:"N1"},
+{kanji:"堕",hanviet:"ĐÀ",on:"ダ",kun:"お（ちる）",meaning:"sa ngã, rơi xuống",level:"N1"},
+{kanji:"奪",hanviet:"ĐOẠT",on:"ダツ",kun:"うば（う）",meaning:"chiếm đoạt",level:"N1"},
+{kanji:"脱",hanviet:"THOÁT",on:"ダツ",kun:"ぬ（ぐ）",meaning:"thoát khỏi, cởi",level:"N1"},
+{kanji:"丹",hanviet:"ĐAN",on:"タン",kun:"—",meaning:"son đỏ, đơn",level:"N1"},
+{kanji:"鍛",hanviet:"ĐOÀN",on:"タン",kun:"きた（える）",meaning:"rèn luyện",level:"N1"},
+{kanji:"弾",hanviet:"ĐÀN",on:"ダン",kun:"ひ（く）",meaning:"đàn, đạn",level:"N1"},
+{kanji:"智",hanviet:"TRÍ",on:"チ",kun:"—",meaning:"trí tuệ",level:"N1"},
+{kanji:"痴",hanviet:"SI",on:"チ",kun:"—",meaning:"ngốc, ngu si",level:"N1"},
+{kanji:"稚",hanviet:"TRĨ",on:"チ",kun:"おさな（い）",meaning:"trẻ con, non nớt",level:"N1"},
+{kanji:"蓄",hanviet:"TÍCH",on:"チク",kun:"たくわ（える）",meaning:"tích lũy, dự trữ",level:"N1"},
+{kanji:"鋳",hanviet:"ĐÚC",on:"チュウ",kun:"い（る）",meaning:"đúc kim loại",level:"N1"},
+{kanji:"懲",hanviet:"TRỪNG",on:"チョウ",kun:"こ（りる）",meaning:"trừng phạt",level:"N1"},
+{kanji:"勅",hanviet:"SẮC",on:"チョク",kun:"—",meaning:"sắc lệnh của vua",level:"N1"},
+{kanji:"朕",hanviet:"TRẪM",on:"チン",kun:"—",meaning:"trẫm (ngôi vua)",level:"N1"},
+{kanji:"沈",hanviet:"TRẦM",on:"チン",kun:"しず（む）",meaning:"chìm, trầm lặng",level:"N1"},
+{kanji:"珍",hanviet:"TRÂN",on:"チン",kun:"めずら（しい）",meaning:"quý hiếm",level:"N1"},
+{kanji:"墜",hanviet:"TRỤY",on:"ツイ",kun:"お（ちる）",meaning:"rơi xuống, trụy",level:"N1"},
+{kanji:"塚",hanviet:"TỦNG",on:"チョウ",kun:"つか",meaning:"gò đất, mộ",level:"N1"},
+{kanji:"漬",hanviet:"TẨY",on:"シ",kun:"つ（ける）",meaning:"ngâm, muối dưa",level:"N1"},
+{kanji:"紡",hanviet:"PHÓNG",on:"ボウ",kun:"つむ（ぐ）",meaning:"kéo sợi, dệt",level:"N1"},
+{kanji:"諦",hanviet:"ĐỀ",on:"テイ",kun:"あきら（める）",meaning:"từ bỏ, chấp nhận",level:"N1"},
+{kanji:"泥",hanviet:"NÊ",on:"デイ",kun:"どろ",meaning:"bùn đất",level:"N1"},
+{kanji:"溺",hanviet:"NẶC",on:"デキ",kun:"おぼ（れる）",meaning:"chết đuối, đắm chìm",level:"N1"},
+{kanji:"徹",hanviet:"TRIỆT",on:"テツ",kun:"—",meaning:"triệt để, xuyên suốt",level:"N1"},
+{kanji:"撤",hanviet:"TRIỆT",on:"テツ",kun:"—",meaning:"rút lui, triệt",level:"N1"},
+{kanji:"添",hanviet:"THIÊM",on:"テン",kun:"そ（える）",meaning:"thêm vào",level:"N1"},
+{kanji:"妬",hanviet:"ĐỐ",on:"ト",kun:"ねた（む）",meaning:"ghen tức",level:"N1"},
+{kanji:"吐",hanviet:"THỔ",on:"ト",kun:"は（く）",meaning:"nôn, thổ ra",level:"N1"},
+{kanji:"塗",hanviet:"ĐỒ",on:"ト",kun:"ぬ（る）",meaning:"bôi, quét",level:"N1"},
+{kanji:"匿",hanviet:"ĐỘT",on:"トク",kun:"かく（す）",meaning:"che giấu, ẩn náu",level:"N1"},
+{kanji:"凸",hanviet:"ĐÔNG",on:"トツ",kun:"—",meaning:"lồi",level:"N1"},
+{kanji:"騰",hanviet:"ĐẰNG",on:"トウ",kun:"—",meaning:"tăng vọt, phi lên",level:"N1"},
+{kanji:"闘",hanviet:"ĐẤU",on:"トウ",kun:"たたか（う）",meaning:"đấu tranh",level:"N1"},
+{kanji:"謄",hanviet:"ĐẰNG",on:"トウ",kun:"—",meaning:"sao chép, chép lại",level:"N1"},
+{kanji:"糖",hanviet:"ĐƯỜNG",on:"トウ",kun:"—",meaning:"đường mía",level:"N1"},
+{kanji:"洞",hanviet:"ĐỘNG",on:"ドウ",kun:"ほら",meaning:"hang động, thấu hiểu",level:"N1"},
+{kanji:"胴",hanviet:"ĐỒNG",on:"ドウ",kun:"—",meaning:"thân mình",level:"N1"},
+{kanji:"鈍",hanviet:"ĐỘN",on:"ドン",kun:"にぶ（い）",meaning:"đần độn, chậm",level:"N1"},
+{kanji:"鍋",hanviet:"HOA",on:"カ",kun:"なべ",meaning:"nồi",level:"N1"},
+{kanji:"謎",hanviet:"MÊ",on:"—",kun:"なぞ",meaning:"câu đố, bí ẩn",level:"N1"},
+{kanji:"縄",hanviet:"THẰNG",on:"ジョウ",kun:"なわ",meaning:"sợi dây, thừng",level:"N1"},
+{kanji:"軟",hanviet:"NHUYỄN",on:"ナン",kun:"やわ（らか）",meaning:"mềm",level:"N1"},
+{kanji:"粘",hanviet:"NIÊM",on:"ネン",kun:"ねば（る）",meaning:"dính, kiên trì",level:"N1"},
+{kanji:"悩",hanviet:"NÃO",on:"ノウ",kun:"なや（む）",meaning:"khổ não, lo lắng",level:"N1"},
+{kanji:"把",hanviet:"BÁ",on:"ハ",kun:"—",meaning:"nắm, bó",level:"N1"},
+{kanji:"覇",hanviet:"BÁ",on:"ハ",kun:"—",meaning:"bá quyền, thống trị",level:"N1"},
+{kanji:"廃",hanviet:"PHẾ",on:"ハイ",kun:"すた（れる）",meaning:"phế bỏ, bỏ hoang",level:"N1"},
+{kanji:"肺",hanviet:"PHẾ",on:"ハイ",kun:"—",meaning:"phổi",level:"N1"},
+{kanji:"賠",hanviet:"BỒI",on:"バイ",kun:"—",meaning:"bồi thường",level:"N1"},
+{kanji:"伐",hanviet:"PHẠT",on:"バツ",kun:"—",meaning:"đốn chặt, trừng phạt",level:"N1"},
+{kanji:"罰",hanviet:"PHẠT",on:"バツ",kun:"—",meaning:"hình phạt",level:"N1"},
+{kanji:"繁",hanviet:"PHỒN",on:"ハン",kun:"しげ（る）",meaning:"phồn thịnh, um tùm",level:"N1"},
+{kanji:"煩",hanviet:"PHIỀN",on:"ハン",kun:"わずら（う）",meaning:"phiền muộn",level:"N1"},
+{kanji:"頒",hanviet:"BAN",on:"ハン",kun:"—",meaning:"ban phát, phân phối",level:"N1"},
+{kanji:"蛮",hanviet:"MAN",on:"バン",kun:"—",meaning:"man rợ, dã man",level:"N1"},
+{kanji:"卑",hanviet:"BÊ",on:"ヒ",kun:"いや（しい）",meaning:"hèn thấp, ty tiện",level:"N1"},
+{kanji:"泌",hanviet:"BÍ",on:"ヒ",kun:"—",meaning:"tiết ra, bài tiết",level:"N1"},
+{kanji:"弊",hanviet:"TỆ",on:"ヘイ",kun:"—",meaning:"tệ hại, hại",level:"N1"},
+{kanji:"蔑",hanviet:"MIỆT",on:"ベツ",kun:"さげす（む）",meaning:"khinh thường, coi thường",level:"N1"},
+{kanji:"偏",hanviet:"THIÊN",on:"ヘン",kun:"かたよ（る）",meaning:"thiên lệch, lệch",level:"N1"},
+{kanji:"遍",hanviet:"BIẾN",on:"ヘン",kun:"—",meaning:"khắp, biến",level:"N1"},
+{kanji:"哺",hanviet:"BỘ",on:"ホ",kun:"—",meaning:"nuôi con bú",level:"N1"},
+{kanji:"奉",hanviet:"PHỤNG",on:"ホウ",kun:"たてまつ（る）",meaning:"phụng sự",level:"N1"},
+{kanji:"砲",hanviet:"PHÁO",on:"ホウ",kun:"—",meaning:"đại pháo",level:"N1"},
+{kanji:"胞",hanviet:"BÀO",on:"ホウ",kun:"—",meaning:"túi, bào",level:"N1"},
+{kanji:"没",hanviet:"MỘT",on:"ボツ",kun:"—",meaning:"chìm, qua đời",level:"N1"},
+{kanji:"摩",hanviet:"MA",on:"マ",kun:"—",meaning:"mài, ma sát",level:"N1"},
+{kanji:"妹",hanviet:"MUỘI",on:"マイ",kun:"いもうと",meaning:"em gái",level:"N1"},
+{kanji:"慢",hanviet:"MẠN",on:"マン",kun:"—",meaning:"kiêu mạn, chậm chạp",level:"N1"},
+{kanji:"眉",hanviet:"MI",on:"ビ",kun:"まゆ",meaning:"lông mày",level:"N1"},
+{kanji:"魅",hanviet:"MỊ",on:"ミ",kun:"—",meaning:"ma quỷ, quyến rũ",level:"N1"},
+{kanji:"妙",hanviet:"DIỆU",on:"ミョウ",kun:"—",meaning:"kỳ diệu, vi diệu",level:"N1"},
+{kanji:"銘",hanviet:"MINH",on:"メイ",kun:"—",meaning:"khắc tên, ghi nhớ",level:"N1"},
+{kanji:"滅",hanviet:"DIỆT",on:"メツ",kun:"ほろ（びる）",meaning:"tiêu diệt",level:"N1"},
+{kanji:"猛",hanviet:"MÃNH",on:"モウ",kun:"たけ（しい）",meaning:"mãnh liệt, hung hăng",level:"N1"},
+{kanji:"妄",hanviet:"VỌNG",on:"モウ",kun:"—",meaning:"vọng tưởng, sai trái",level:"N1"},
+{kanji:"模",hanviet:"MÔ",on:"モ",kun:"—",meaning:"mô phỏng, khuôn mẫu",level:"N1"},
+{kanji:"躍",hanviet:"DƯỢC",on:"ヤク",kun:"おど（る）",meaning:"nhảy, vọt lên",level:"N1"},
+{kanji:"癒",hanviet:"DU",on:"ユ",kun:"い（える）",meaning:"chữa lành, lành bệnh",level:"N1"},
+{kanji:"誘",hanviet:"DỤ",on:"ユウ",kun:"さそ（う）",meaning:"dụ dỗ, mời",level:"N1"},
+{kanji:"憂",hanviet:"ƯU",on:"ユウ",kun:"うれ（える）",meaning:"lo lắng, ưu phiền",level:"N1"},
+{kanji:"猶",hanviet:"DO",on:"ユウ",kun:"なお",meaning:"vẫn còn, trì hoãn",level:"N1"},
+{kanji:"融",hanviet:"DUNG",on:"ユウ",kun:"と（ける）",meaning:"tan chảy, dung hợp",level:"N1"},
+{kanji:"雄",hanviet:"HÙNG",on:"ユウ",kun:"おす",meaning:"hùng, con đực",level:"N1"},
+{kanji:"抑",hanviet:"ỨC",on:"ヨク",kun:"おさ（える）",meaning:"kìm nén, ức chế",level:"N1"},
+{kanji:"沃",hanviet:"ỌC",on:"ヨク",kun:"—",meaning:"màu mỡ, phì nhiêu",level:"N1"},
+{kanji:"謡",hanviet:"DIÊU",on:"ヨウ",kun:"うた（う）",meaning:"khúc hát, dao",level:"N1"},
+{kanji:"擁",hanviet:"ỦNG",on:"ヨウ",kun:"—",meaning:"ủng hộ, ôm",level:"N1"},
+{kanji:"抹",hanviet:"MẠT",on:"マツ",kun:"—",meaning:"xóa bỏ, bôi",level:"N1"},
+{kanji:"赦",hanviet:"XÁ",on:"シャ",kun:"ゆる（す）",meaning:"tha thứ",level:"N1"},
+{kanji:"嗅",hanviet:"KHỨU",on:"キュウ",kun:"か（ぐ）",meaning:"ngửi mùi",level:"N1"},
+{kanji:"窒",hanviet:"CHẤT",on:"チツ",kun:"—",meaning:"ngạt thở, bí",level:"N1"},
+{kanji:"賄",hanviet:"HỐI",on:"ワイ",kun:"まかな（う）",meaning:"hối lộ, nuôi ăn",level:"N1"},
+{kanji:"湧",hanviet:"DŨNG",on:"ユウ",kun:"わ（く）",meaning:"tuôn ra, vọt lên",level:"N1"},
+{kanji:"剥",hanviet:"BẾ",on:"ハク",kun:"は（がす）",meaning:"bóc, lột",level:"N1"},
+{kanji:"倣",hanviet:"PHỎNG",on:"ホウ",kun:"なら（う）",meaning:"bắt chước, mô phỏng",level:"N1"},
+{kanji:"弔",hanviet:"ĐIẾU",on:"チョウ",kun:"とむら（う）",meaning:"phúng viếng, điếu",level:"N1"},
+{kanji:"醸",hanviet:"NHƯỠNG",on:"ジョウ",kun:"かも（す）",meaning:"ủ rượu, gây ra",level:"N1"},
+{kanji:"憧",hanviet:"ĐỒNG",on:"ショウ",kun:"あこが（れる）",meaning:"khao khát, ngưỡng mộ",level:"N1"},
+{kanji:"貢",hanviet:"CỐNG",on:"コウ",kun:"みつ（ぐ）",meaning:"cống nạp",level:"N1"},
+{kanji:"串",hanviet:"XUYÊN",on:"—",kun:"くし",meaning:"xiên que",level:"N1"},
+// ===== N3 =====
+{kanji:"化",hanviet:"HÓA",on:"カ、ケ",kun:"ば（ける）",meaning:"biến hóa",level:"N3"},
+{kanji:"内",hanviet:"NỘI",on:"ナイ、ダイ",kun:"うち",meaning:"bên trong",level:"N3"},
+{kanji:"反",hanviet:"PHẢN",on:"ハン",kun:"かえ（す）",meaning:"phản đối",level:"N3"},
+{kanji:"平",hanviet:"BÌNH",on:"ヘイ、ビョウ",kun:"たい（ら）",meaning:"hòa bình",level:"N3"},
+{kanji:"氷",hanviet:"BĂNG",on:"ヒョウ",kun:"こおり",meaning:"băng giá",level:"N3"},
+{kanji:"石",hanviet:"THẠCH",on:"セキ、シャク",kun:"いし",meaning:"đá",level:"N3"},
+{kanji:"他",hanviet:"THA",on:"タ",kun:"ほか",meaning:"khác",level:"N3"},
+{kanji:"加",hanviet:"GIA",on:"カ",kun:"くわ（える）",meaning:"gia tăng",level:"N3"},
+{kanji:"失",hanviet:"THẤT",on:"シツ",kun:"うしな（う）",meaning:"mất",level:"N3"},
+{kanji:"血",hanviet:"HUYẾT",on:"ケツ",kun:"ち",meaning:"máu",level:"N3"},
+{kanji:"共",hanviet:"CỘNG",on:"キョウ",kun:"とも",meaning:"cộng tác",level:"N3"},
+{kanji:"曲",hanviet:"KHÚC",on:"キョク",kun:"ま（がる）",meaning:"ca khúc",level:"N3"},
+{kanji:"竹",hanviet:"TRÚC",on:"チク",kun:"たけ",meaning:"tre, trúc",level:"N3"},
+{kanji:"虫",hanviet:"TRÙNG",on:"チュウ",kun:"むし",meaning:"côn trùng",level:"N3"},
+{kanji:"交",hanviet:"GIAO",on:"コウ",kun:"まじ（わる）",meaning:"giao thông",level:"N3"},
+{kanji:"成",hanviet:"THÀNH",on:"セイ、ジョウ",kun:"な（る）",meaning:"thành công",level:"N3"},
+{kanji:"全",hanviet:"TOÀN",on:"ゼン",kun:"まった（く）",meaning:"toàn bộ",level:"N3"},
+{kanji:"争",hanviet:"TRANH",on:"ソウ",kun:"あらそ（う）",meaning:"tranh giành",level:"N3"},
+{kanji:"任",hanviet:"NHIỆM",on:"ニン",kun:"まか（せる）",meaning:"trách nhiệm",level:"N3"},
+{kanji:"利",hanviet:"LỢI",on:"リ",kun:"き（く）",meaning:"lợi ích",level:"N3"},
+{kanji:"防",hanviet:"PHÒNG",on:"ボウ",kun:"ふせ（ぐ）",meaning:"phòng ngừa",level:"N3"},
+{kanji:"返",hanviet:"PHẢN",on:"ヘン",kun:"かえ（す）",meaning:"trả lại",level:"N3"},
+{kanji:"身",hanviet:"THÂN",on:"シン",kun:"み",meaning:"cơ thể",level:"N3"},
+{kanji:"努",hanviet:"NỖ",on:"ド",kun:"つと（める）",meaning:"nỗ lực",level:"N3"},
+{kanji:"谷",hanviet:"CỐC",on:"コク",kun:"たに",meaning:"thung lũng",level:"N3"},
+{kanji:"完",hanviet:"HOÀN",on:"カン",kun:"—",meaning:"hoàn thành",level:"N3"},
+{kanji:"角",hanviet:"GIÁC",on:"カク",kun:"かど、つの",meaning:"góc cạnh",level:"N3"},
+{kanji:"形",hanviet:"HÌNH",on:"ケイ、ギョウ",kun:"かたち",meaning:"hình dạng",level:"N3"},
+{kanji:"決",hanviet:"QUYẾT",on:"ケツ",kun:"き（める）",meaning:"quyết định",level:"N3"},
+{kanji:"希",hanviet:"HI",on:"キ、ケ",kun:"まれ",meaning:"hi vọng",level:"N3"},
+{kanji:"幸",hanviet:"HẠNH",on:"コウ",kun:"しあわ（せ）",meaning:"hạnh phúc",level:"N3"},
+{kanji:"季",hanviet:"QUÝ",on:"キ",kun:"—",meaning:"mùa",level:"N3"},
+{kanji:"泣",hanviet:"KHẤP",on:"キュウ",kun:"な（く）",meaning:"khóc",level:"N3"},
+{kanji:"易",hanviet:"DỊCH",on:"エキ、イ",kun:"やさ（しい）",meaning:"dễ dàng",level:"N3"},
+{kanji:"育",hanviet:"DỤC",on:"イク",kun:"そだ（つ）",meaning:"giáo dục",level:"N3"},
+{kanji:"泳",hanviet:"VỊNH",on:"エイ",kun:"およ（ぐ）",meaning:"bơi",level:"N3"},
+{kanji:"定",hanviet:"ĐỊNH",on:"テイ、ジョウ",kun:"さだ（める）",meaning:"quyết định",level:"N3"},
+{kanji:"底",hanviet:"ĐỂ",on:"テイ",kun:"そこ",meaning:"đáy",level:"N3"},
+{kanji:"命",hanviet:"MỆNH",on:"メイ、ミョウ",kun:"いのち",meaning:"sinh mệnh",level:"N3"},
+{kanji:"法",hanviet:"PHÁP",on:"ホウ",kun:"のり",meaning:"pháp luật",level:"N3"},
+{kanji:"勇",hanviet:"DŨNG",on:"ユウ",kun:"いさ（む）",meaning:"dũng cảm",level:"N3"},
+{kanji:"変",hanviet:"BIẾN",on:"ヘン",kun:"か（わる）",meaning:"thay đổi",level:"N3"},
+{kanji:"飛",hanviet:"PHI",on:"ヒ",kun:"と（ぶ）",meaning:"bay",level:"N3"},
+{kanji:"美",hanviet:"MĨ",on:"ビ、ミ",kun:"うつく（しい）",meaning:"vẻ đẹp",level:"N3"},
+{kanji:"独",hanviet:"ĐỘC",on:"ドク",kun:"ひと（り）",meaning:"độc thân",level:"N3"},
+{kanji:"草",hanviet:"THẢO",on:"ソウ",kun:"くさ",meaning:"cỏ",level:"N3"},
+{kanji:"信",hanviet:"TÍN",on:"シン",kun:"—",meaning:"tín nhiệm",level:"N3"},
+{kanji:"星",hanviet:"TINH",on:"セイ",kun:"ほし",meaning:"ngôi sao",level:"N3"},
+{kanji:"単",hanviet:"ĐƠN",on:"タン",kun:"ひとえ",meaning:"đơn giản",level:"N3"},
+{kanji:"炭",hanviet:"THAN",on:"タン",kun:"すみ",meaning:"than",level:"N3"},
+{kanji:"活",hanviet:"HOẠT",on:"カツ",kun:"い（きる）",meaning:"sinh hoạt",level:"N3"},
+{kanji:"感",hanviet:"CẢM",on:"カン",kun:"—",meaning:"cảm xúc",level:"N3"},
+{kanji:"解",hanviet:"GIẢI",on:"カイ、ゲ",kun:"わか（る）",meaning:"giải quyết",level:"N3"},
+{kanji:"愛",hanviet:"ÁI",on:"アイ",kun:"いと（しい）",meaning:"yêu thương",level:"N3"},
+{kanji:"禁",hanviet:"CẤM",on:"キン",kun:"—",meaning:"cấm đoán",level:"N3"},
+{kanji:"夢",hanviet:"MỘNG",on:"ム",kun:"ゆめ",meaning:"giấc mơ",level:"N3"},
+{kanji:"続",hanviet:"TỤC",on:"ゾク",kun:"つづ（く）",meaning:"tiếp tục",level:"N3"},
+{kanji:"選",hanviet:"TUYỂN",on:"セン",kun:"えら（ぶ）",meaning:"tuyển chọn",level:"N3"},
+{kanji:"導",hanviet:"ĐẠO",on:"ドウ",kun:"みちび（く）",meaning:"lãnh đạo",level:"N3"},
+{kanji:"熱",hanviet:"NHIỆT",on:"ネツ",kun:"あつ（い）",meaning:"nhiệt độ",level:"N3"},
+{kanji:"量",hanviet:"LƯỢNG",on:"リョウ",kun:"はか（る）",meaning:"số lượng",level:"N3"},
+{kanji:"機",hanviet:"CƠ",on:"キ",kun:"はた",meaning:"máy móc",level:"N3"},
+{kanji:"橋",hanviet:"KIỀU",on:"キョウ",kun:"はし",meaning:"cây cầu",level:"N3"},
+{kanji:"波",hanviet:"BA",on:"ハ",kun:"なみ",meaning:"con sóng",level:"N3"},
+{kanji:"念",hanviet:"NIỆM",on:"ネン",kun:"—",meaning:"ý tưởng",level:"N3"},
+{kanji:"勝",hanviet:"THẮNG",on:"ショウ",kun:"か（つ）",meaning:"chiến thắng",level:"N3"},
+{kanji:"種",hanviet:"CHỦNG",on:"シュ",kun:"たね",meaning:"chủng loại",level:"N3"},
+{kanji:"折",hanviet:"CHIẾT",on:"セツ",kun:"お（る）",meaning:"gãy, gập",level:"N3"},
+{kanji:"雑",hanviet:"TẠP",on:"ザツ、ゾウ",kun:"まじ（る）",meaning:"tạp, hỗn hợp",level:"N3"},
+{kanji:"察",hanviet:"SÁT",on:"サツ",kun:"—",meaning:"quan sát",level:"N3"},
+{kanji:"際",hanviet:"TẾ",on:"サイ",kun:"きわ",meaning:"giao tiếp, bên cạnh",level:"N3"},
+{kanji:"算",hanviet:"TOÁN",on:"サン",kun:"そろ",meaning:"tính toán",level:"N3"},
+{kanji:"散",hanviet:"TÁN",on:"サン",kun:"ち（る）",meaning:"phân tán",level:"N3"},
+{kanji:"残",hanviet:"TÀN",on:"ザン",kun:"のこ（る）",meaning:"còn lại",level:"N3"},
+{kanji:"財",hanviet:"TÀI",on:"ザイ、サイ",kun:"—",meaning:"tài sản",level:"N3"},
+{kanji:"罪",hanviet:"TỘI",on:"ザイ",kun:"つみ",meaning:"tội lỗi",level:"N3"},
+{kanji:"在",hanviet:"TẠI",on:"ザイ",kun:"あ（る）",meaning:"hiện tại",level:"N3"},
+{kanji:"再",hanviet:"TÁI",on:"サイ、サ",kun:"ふたた（び）",meaning:"lại, một lần nữa",level:"N3"},
+{kanji:"刺",hanviet:"THÍCH",on:"シ",kun:"さ（す）",meaning:"đâm chích",level:"N3"},
+{kanji:"姿",hanviet:"TƯ",on:"シ",kun:"すがた",meaning:"dáng vẻ",level:"N3"},
+{kanji:"冷",hanviet:"LÃNH",on:"レイ",kun:"つめ（たい）",meaning:"lạnh",level:"N3"},
+{kanji:"例",hanviet:"LỆ",on:"レイ",kun:"たと（える）",meaning:"ví dụ",level:"N3"},
+{kanji:"礼",hanviet:"LỄ",on:"レイ、ライ",kun:"—",meaning:"lễ nghi",level:"N3"},
+{kanji:"令",hanviet:"LỆNH",on:"レイ",kun:"—",meaning:"mệnh lệnh",level:"N3"},
+{kanji:"路",hanviet:"LỘ",on:"ロ",kun:"みち",meaning:"con đường",level:"N3"},
+{kanji:"労",hanviet:"LAO",on:"ロウ",kun:"—",meaning:"lao động",level:"N3"},
+{kanji:"連",hanviet:"LIÊN",on:"レン",kun:"つ（れる）",meaning:"liên kết",level:"N3"},
+{kanji:"練",hanviet:"LUYỆN",on:"レン",kun:"ね（る）",meaning:"luyện tập",level:"N3"},
+{kanji:"老",hanviet:"LÃO",on:"ロウ",kun:"お（いる）",meaning:"già",level:"N3"},
+// ===== N2 (đầy đủ từ PDF AhoVN) =====
+{kanji:"腕",hanviet:"OẢN",on:"ワン",kun:"うで",meaning:"cánh tay",level:"N2"},
+{kanji:"和",hanviet:"HÒA",on:"ワ、オ、カ",kun:"やわ（らぐ）",meaning:"hòa thuận",level:"N2"},
+{kanji:"湾",hanviet:"LOAN",on:"ワン",kun:"いりえ",meaning:"vịnh",level:"N2"},
+{kanji:"論",hanviet:"LUẬN",on:"ロン",kun:"—",meaning:"bàn luận, lý luận",level:"N2"},
+{kanji:"録",hanviet:"LỤC",on:"ロク",kun:"—",meaning:"ghi chép, kỷ lục",level:"N2"},
+{kanji:"恋",hanviet:"LUYẾN",on:"レン",kun:"こい",meaning:"tình yêu",level:"N2"},
+{kanji:"歴",hanviet:"LỊCH",on:"レキ",kun:"—",meaning:"lý lịch",level:"N2"},
+{kanji:"列",hanviet:"LIỆT",on:"レツ、レ",kun:"—",meaning:"hàng, dãy",level:"N2"},
+{kanji:"齢",hanviet:"LINH",on:"レイ",kun:"—",meaning:"tuổi",level:"N2"},
+{kanji:"零",hanviet:"LINH",on:"レイ",kun:"ぜろ",meaning:"số không",level:"N2"},
+{kanji:"類",hanviet:"LOẠI",on:"ルイ",kun:"たぐ（い）",meaning:"loại",level:"N2"},
+{kanji:"涙",hanviet:"LỆ",on:"ルイ、レイ",kun:"なみだ",meaning:"nước mắt",level:"N2"},
+{kanji:"緑",hanviet:"LỤC",on:"リョク、ロク",kun:"みどり",meaning:"màu xanh lá",level:"N2"},
+{kanji:"輪",hanviet:"LUÂN",on:"リン",kun:"わ",meaning:"bánh xe",level:"N2"},
+{kanji:"領",hanviet:"LĨNH",on:"リョウ",kun:"—",meaning:"lãnh thổ",level:"N2"},
+{kanji:"良",hanviet:"LƯƠNG",on:"リョウ",kun:"よ（い）",meaning:"tốt",level:"N2"},
+{kanji:"涼",hanviet:"LƯƠNG",on:"リョウ",kun:"すず（しい）",meaning:"mát mẻ",level:"N2"},
+{kanji:"療",hanviet:"LIỆU",on:"リョウ",kun:"—",meaning:"trị liệu",level:"N2"},
+{kanji:"両",hanviet:"LƯỠNG",on:"リョウ",kun:"—",meaning:"cả hai",level:"N2"},
+{kanji:"了",hanviet:"LIỄU",on:"リョウ",kun:"—",meaning:"hoàn thành",level:"N2"},
+{kanji:"粒",hanviet:"LẠP",on:"リュウ",kun:"つぶ",meaning:"hạt gạo",level:"N2"},
+{kanji:"流",hanviet:"LƯU",on:"リュウ、ル",kun:"なが（れる）",meaning:"dòng chảy",level:"N2"},
+{kanji:"留",hanviet:"LƯU",on:"リュウ、ル",kun:"と（める）",meaning:"giữ lại",level:"N2"},
+{kanji:"略",hanviet:"LƯỢC",on:"リャク",kun:"—",meaning:"tóm lược",level:"N2"},
+{kanji:"率",hanviet:"SUẤT",on:"リツ、ソツ",kun:"ひき（いる）",meaning:"tỉ lệ",level:"N2"},
+{kanji:"律",hanviet:"LUẬT",on:"リツ、リチ",kun:"—",meaning:"quy tắc",level:"N2"},
+{kanji:"裏",hanviet:"LÍ",on:"リ",kun:"うら",meaning:"mặt sau",level:"N2"},
+{kanji:"陸",hanviet:"LỤC",on:"リク、ロク",kun:"おか",meaning:"đất liền",level:"N2"},
+{kanji:"卵",hanviet:"NOÃN",on:"ラン",kun:"たまご",meaning:"trứng",level:"N2"},
+{kanji:"乱",hanviet:"LOẠN",on:"ラン、ロン",kun:"みだ（れる）",meaning:"hỗn loạn",level:"N2"},
+{kanji:"絡",hanviet:"LẠC",on:"ラク",kun:"から（む）",meaning:"liên quan",level:"N2"},
+{kanji:"落",hanviet:"LẠC",on:"ラク",kun:"お（ちる）",meaning:"rơi xuống",level:"N2"},
+{kanji:"頼",hanviet:"LẠI",on:"ライ",kun:"たよ（る）",meaning:"nhờ cậy",level:"N2"},
+{kanji:"翌",hanviet:"DỰC",on:"ヨク",kun:"—",meaning:"ngày sau",level:"N2"},
+{kanji:"欲",hanviet:"DỤC",on:"ヨク",kun:"ほ（しい）",meaning:"mong muốn",level:"N2"},
+{kanji:"陽",hanviet:"DƯƠNG",on:"ヨウ",kun:"ひ",meaning:"mặt trời",level:"N2"},
+{kanji:"踊",hanviet:"DŨNG",on:"ヨウ",kun:"おど（る）",meaning:"nhảy múa",level:"N2"},
+{kanji:"要",hanviet:"YẾU",on:"ヨウ",kun:"い（る）",meaning:"cần thiết",level:"N2"},
+{kanji:"様",hanviet:"DẠNG",on:"ヨウ、ショウ",kun:"さま",meaning:"dáng vẻ",level:"N2"},
+{kanji:"溶",hanviet:"DUNG",on:"ヨウ",kun:"と（ける）",meaning:"tan chảy",level:"N2"},
+{kanji:"容",hanviet:"DUNG",on:"ヨウ",kun:"—",meaning:"dung lượng",level:"N2"},
+{kanji:"幼",hanviet:"ẤU",on:"ヨウ",kun:"おさな（い）",meaning:"nhỏ bé, non nớt",level:"N2"},
+{kanji:"預",hanviet:"DỰ",on:"ヨ",kun:"あず（ける）",meaning:"gửi, giữ hộ",level:"N2"},
+{kanji:"余",hanviet:"DƯ",on:"ヨ",kun:"あま（る）",meaning:"dư thừa",level:"N2"},
+{kanji:"与",hanviet:"DỰ",on:"ヨ",kun:"あた（える）",meaning:"ban cho",level:"N2"},
+{kanji:"予",hanviet:"DỰ",on:"ヨ、シャ",kun:"あらかじ（め）",meaning:"dự đoán",level:"N2"},
+{kanji:"郵",hanviet:"BƯU",on:"ユウ",kun:"—",meaning:"bưu điện",level:"N2"},
+{kanji:"遊",hanviet:"DU",on:"ユウ、ユ",kun:"あそ（ぶ）",meaning:"đi chơi",level:"N2"},
+{kanji:"勇",hanviet:"DŨNG",on:"ユウ",kun:"いさ（む）",meaning:"dũng khí",level:"N2"},
+{kanji:"由",hanviet:"DO",on:"ユ、ユウ、ユイ",kun:"よし、よ（る）",meaning:"tự do, lý do",level:"N2"},
+{kanji:"優",hanviet:"ƯU",on:"ユウ、ウ",kun:"やさ（しい）",meaning:"ưu tú, dịu dàng",level:"N2"},
+{kanji:"輸",hanviet:"THÂU",on:"ユ、シュ",kun:"—",meaning:"vận tải",level:"N2"},
+{kanji:"油",hanviet:"DU",on:"ユ、ユウ",kun:"あぶら",meaning:"dầu",level:"N2"},
+{kanji:"役",hanviet:"DỊCH",on:"ヤク、エキ",kun:"—",meaning:"sai khiến",level:"N2"},
+{kanji:"約",hanviet:"ƯỚC",on:"ヤク",kun:"—",meaning:"điều ước",level:"N2"},
+{kanji:"戻",hanviet:"LỆ",on:"レイ",kun:"もど（す）",meaning:"quay lại",level:"N2"},
+{kanji:"毛",hanviet:"MAO",on:"モウ",kun:"け",meaning:"lông",level:"N2"},
+{kanji:"面",hanviet:"DIỆN",on:"メン、ベン",kun:"おもて",meaning:"bề mặt",level:"N2"},
+{kanji:"鳴",hanviet:"MINH",on:"メイ",kun:"な（く）",meaning:"tiếng gào, kêu",level:"N2"},
+{kanji:"綿",hanviet:"MIÊN",on:"メン",kun:"わた",meaning:"bông gòn",level:"N2"},
+{kanji:"迷",hanviet:"MÊ",on:"メイ",kun:"まよ（う）",meaning:"mê hoặc, lạc đường",level:"N2"},
+{kanji:"命",hanviet:"MỆNH",on:"メイ、ミョウ",kun:"いのち",meaning:"sinh mệnh",level:"N2"},
+{kanji:"娘",hanviet:"NƯƠNG",on:"ジョウ",kun:"むすめ",meaning:"con gái",level:"N2"},
+{kanji:"夢",hanviet:"MỘNG",on:"ム、ボウ",kun:"ゆめ",meaning:"giấc mơ",level:"N2"},
+{kanji:"無",hanviet:"VÔ",on:"ム、ブ",kun:"な（い）",meaning:"không",level:"N2"},
+{kanji:"務",hanviet:"VỤ",on:"ム",kun:"つと（める）",meaning:"công việc, nhiệm vụ",level:"N2"},
+{kanji:"眠",hanviet:"MIÊN",on:"ミン",kun:"ねむ（る）",meaning:"giấc ngủ",level:"N2"},
+{kanji:"未",hanviet:"VỊ",on:"ミ、ビ",kun:"いま（だ）",meaning:"chưa",level:"N2"},
+{kanji:"末",hanviet:"MẠT",on:"マツ、バツ",kun:"すえ",meaning:"cuối, ngọn",level:"N2"},
+{kanji:"満",hanviet:"MÃN",on:"マン、バン",kun:"み（ちる）",meaning:"đầy",level:"N2"},
+{kanji:"枚",hanviet:"MAI",on:"マイ、バイ",kun:"—",meaning:"tờ, tấm",level:"N2"},
+{kanji:"埋",hanviet:"MAI",on:"マイ",kun:"う（める）",meaning:"chôn, mai táng",level:"N2"},
+{kanji:"磨",hanviet:"MA",on:"マ",kun:"みが（く）",meaning:"đánh bóng",level:"N2"},
+{kanji:"貿",hanviet:"MẬU",on:"ボウ",kun:"—",meaning:"giao dịch thương mại",level:"N2"},
+{kanji:"望",hanviet:"VỌNG",on:"ボウ、モウ",kun:"のぞ（む）",meaning:"khát vọng",level:"N2"},
+{kanji:"棒",hanviet:"BỔNG",on:"ボウ",kun:"—",meaning:"cái gậy",level:"N2"},
+{kanji:"暴",hanviet:"BẠO",on:"ボウ、バク",kun:"あば（れる）",meaning:"tàn bạo",level:"N2"},
+{kanji:"忘",hanviet:"VONG",on:"ボウ、モウ",kun:"わす（れる）",meaning:"quên",level:"N2"},
+{kanji:"忙",hanviet:"MANG",on:"ボウ、モウ",kun:"いそが（しい）",meaning:"bận rộn",level:"N2"},
+{kanji:"帽",hanviet:"MẠO",on:"ボウ、モウ",kun:"ずきん",meaning:"cái mũ",level:"N2"},
+{kanji:"坊",hanviet:"PHƯỜNG",on:"ボウ、ボッ",kun:"—",meaning:"phường, cậu bé",level:"N2"},
+{kanji:"亡",hanviet:"VONG",on:"ボウ、モウ",kun:"な（い）",meaning:"cái chết",level:"N2"},
+{kanji:"訪",hanviet:"PHỎNG",on:"ホウ、ブ",kun:"おとず（れる）",meaning:"thăm viếng",level:"N2"},
+{kanji:"豊",hanviet:"PHONG",on:"ホウ、ブ",kun:"ゆた（か）",meaning:"phong phú",level:"N2"},
+{kanji:"放",hanviet:"PHÓNG",on:"ホウ",kun:"はな（す）",meaning:"giải phóng",level:"N2"},
+{kanji:"抱",hanviet:"BÃO",on:"ホウ",kun:"だ（く）",meaning:"ôm ấp",level:"N2"},
+{kanji:"報",hanviet:"BÁO",on:"ホウ",kun:"むく（いる）",meaning:"báo cáo",level:"N2"},
+{kanji:"宝",hanviet:"BẢO",on:"ホウ",kun:"たから",meaning:"bảo vật",level:"N2"},
+{kanji:"包",hanviet:"BAO",on:"ホウ",kun:"つつ（む）",meaning:"bao bọc",level:"N2"},
+{kanji:"暮",hanviet:"MỘ",on:"ボ",kun:"く（れる）",meaning:"sống",level:"N2"},
+{kanji:"募",hanviet:"MỘ",on:"ボ",kun:"つの（る）",meaning:"ứng tuyển",level:"N2"},
+{kanji:"捕",hanviet:"BỘ",on:"ホ",kun:"と（らえる）",meaning:"bắt giữ",level:"N2"},
+{kanji:"補",hanviet:"BỔ",on:"ホ",kun:"おぎな（う）",meaning:"bổ sung",level:"N2"},
+{kanji:"保",hanviet:"BẢO",on:"ホ、ホウ",kun:"たも（つ）",meaning:"bảo hộ",level:"N2"},
+{kanji:"辺",hanviet:"BIÊN",on:"ヘン",kun:"あた（り）",meaning:"vùng, lân cận",level:"N2"},
+{kanji:"片",hanviet:"PHIẾN",on:"ヘン",kun:"かた",meaning:"mảnh",level:"N2"},
+{kanji:"編",hanviet:"BIÊN",on:"ヘン",kun:"あ（む）",meaning:"biên tập",level:"N2"},
+{kanji:"変",hanviet:"BIẾN",on:"ヘン",kun:"か（わる）",meaning:"thay đổi",level:"N2"},
+{kanji:"壁",hanviet:"BÍCH",on:"ヘキ",kun:"かべ",meaning:"bức tường",level:"N2"},
+{kanji:"米",hanviet:"MỄ",on:"ベイ、マイ",kun:"こめ",meaning:"gạo",level:"N2"},
+{kanji:"並",hanviet:"TINH",on:"ヘイ、ホウ",kun:"なら（べる）",meaning:"thông thường",level:"N2"},
+{kanji:"閉",hanviet:"BẾ",on:"ヘイ",kun:"と（じる）",meaning:"đóng",level:"N2"},
+{kanji:"兵",hanviet:"BINH",on:"ヘイ、ヒョウ",kun:"つわもの",meaning:"binh lính",level:"N2"},
+{kanji:"粉",hanviet:"PHẤN",on:"フン",kun:"こな",meaning:"bột",level:"N2"},
+{kanji:"沸",hanviet:"PHÍ",on:"フツ",kun:"わ（く）",meaning:"sôi",level:"N2"},
+{kanji:"仏",hanviet:"PHẬT",on:"ブツ、フツ",kun:"ほとけ",meaning:"đạo phật",level:"N2"},
+{kanji:"払",hanviet:"PHẤT",on:"フツ、ヒツ",kun:"はら（う）",meaning:"chi trả",level:"N2"},
+{kanji:"複",hanviet:"PHỨC",on:"フク",kun:"—",meaning:"phức tạp",level:"N2"},
+{kanji:"腹",hanviet:"PHÚC",on:"フク",kun:"はら",meaning:"bụng",level:"N2"},
+{kanji:"幅",hanviet:"PHÚC",on:"フク",kun:"はば",meaning:"độ rộng",level:"N2"},
+{kanji:"福",hanviet:"PHÚC",on:"フク",kun:"—",meaning:"hạnh phúc",level:"N2"},
+{kanji:"復",hanviet:"PHỤC",on:"フク",kun:"また",meaning:"phục hồi",level:"N2"},
+{kanji:"副",hanviet:"PHÓ",on:"フク",kun:"—",meaning:"thứ yếu",level:"N2"},
+{kanji:"封",hanviet:"PHONG",on:"フウ、ホウ",kun:"—",meaning:"niêm phong",level:"N2"},
+{kanji:"舞",hanviet:"VŨ",on:"ブ",kun:"ま（う）",meaning:"vũ điệu",level:"N2"},
+{kanji:"武",hanviet:"VŨ",on:"ブ、ム",kun:"たけ（し）",meaning:"vũ khí",level:"N2"},
+{kanji:"負",hanviet:"PHỤ",on:"フ",kun:"ま（ける）",meaning:"thua",level:"N2"},
+{kanji:"膚",hanviet:"PHU",on:"フ",kun:"はだ",meaning:"da",level:"N2"},
+{kanji:"浮",hanviet:"PHÙ",on:"フ",kun:"う（く）",meaning:"nổi lên",level:"N2"},
+{kanji:"符",hanviet:"PHÙ",on:"フ",kun:"—",meaning:"cái thẻ",level:"N2"},
+{kanji:"普",hanviet:"PHỔ",on:"フ",kun:"あまね（く）",meaning:"phổ cập",level:"N2"},
+{kanji:"怖",hanviet:"PHỐ",on:"フ、ホ",kun:"こわ（い）",meaning:"dọa nạt, sợ",level:"N2"},
+{kanji:"府",hanviet:"PHỦ",on:"フ",kun:"—",meaning:"chính phủ",level:"N2"},
+{kanji:"富",hanviet:"PHÚ",on:"フ、フウ",kun:"と（む）",meaning:"giàu có",level:"N2"},
+{kanji:"布",hanviet:"BỐ",on:"フ",kun:"ぬの",meaning:"vải",level:"N2"},
+{kanji:"婦",hanviet:"PHỤ",on:"フ",kun:"—",meaning:"vợ, đàn bà",level:"N2"},
+{kanji:"夫",hanviet:"PHU",on:"フ、フウ、ブ",kun:"おっと",meaning:"chồng",level:"N2"},
+{kanji:"付",hanviet:"PHÓ",on:"フ",kun:"つ（ける）",meaning:"giao phó",level:"N2"},
+{kanji:"秒",hanviet:"MIỂU",on:"ビョウ",kun:"—",meaning:"giây",level:"N2"},
+{kanji:"貧",hanviet:"BẦN",on:"ヒン、ビン",kun:"まず（しい）",meaning:"bần cùng",level:"N2"},
+{kanji:"評",hanviet:"BÌNH",on:"ヒョウ",kun:"—",meaning:"bình phẩm",level:"N2"},
+{kanji:"表",hanviet:"BIỂU",on:"ヒョウ",kun:"おもて",meaning:"biểu hiện",level:"N2"},
+{kanji:"標",hanviet:"TIÊU",on:"ヒョウ",kun:"しるべ",meaning:"tiêu đề",level:"N2"},
+{kanji:"必",hanviet:"TẤT",on:"ヒツ",kun:"かなら（ず）",meaning:"tất yếu",level:"N2"},
+{kanji:"鼻",hanviet:"TỊ",on:"ビ",kun:"はな",meaning:"cái mũi",level:"N2"},
+{kanji:"備",hanviet:"BỊ",on:"ビ",kun:"そな（える）",meaning:"chuẩn bị",level:"N2"},
+{kanji:"飛",hanviet:"PHI",on:"ヒ",kun:"と（ぶ）",meaning:"bay",level:"N2"},
+{kanji:"費",hanviet:"PHÍ",on:"ヒ",kun:"つい（やす）",meaning:"chi phí",level:"N2"},
+{kanji:"皮",hanviet:"BÌ",on:"ヒ",kun:"かわ",meaning:"bề ngoài, da",level:"N2"},
+{kanji:"被",hanviet:"BỊ",on:"ヒ",kun:"こうむ（る）",meaning:"đắp trùm, bị",level:"N2"},
+{kanji:"疲",hanviet:"BÌ",on:"ヒ",kun:"つか（れる）",meaning:"mệt mỏi",level:"N2"},
+{kanji:"比",hanviet:"BỈ",on:"ヒ",kun:"くら（べる）",meaning:"so sánh",level:"N2"},
+{kanji:"批",hanviet:"PHÊ",on:"ヒ",kun:"—",meaning:"phê bình",level:"N2"},
+{kanji:"彼",hanviet:"BỈ",on:"ヒ",kun:"かれ",meaning:"anh ấy, kẻ kia",level:"N2"},
+{kanji:"悲",hanviet:"BI",on:"ヒ",kun:"かな（しい）",meaning:"thương xót",level:"N2"},
+{kanji:"否",hanviet:"PHỦ",on:"ヒ",kun:"いな",meaning:"phủ định",level:"N2"},
+{kanji:"番",hanviet:"PHIÊN",on:"バン",kun:"つが（い）",meaning:"lần lượt",level:"N2"},
+{kanji:"晩",hanviet:"VÃN",on:"バン",kun:"—",meaning:"buổi tối",level:"N2"},
+{kanji:"販",hanviet:"PHIẾN",on:"ハン",kun:"—",meaning:"buôn bán",level:"N2"},
+{kanji:"犯",hanviet:"PHẠM",on:"ハン、ボン",kun:"おか（す）",meaning:"vi phạm",level:"N2"},
+{kanji:"版",hanviet:"BẢN",on:"ハン",kun:"—",meaning:"tái bản",level:"N2"},
+{kanji:"板",hanviet:"BẢN",on:"ハン、バン",kun:"いた",meaning:"cái ván",level:"N2"},
+{kanji:"判",hanviet:"PHÁN",on:"ハン、バン",kun:"わか（る）",meaning:"phán quyết",level:"N2"},
+{kanji:"抜",hanviet:"BẠT",on:"バツ、ハツ",kun:"ぬ（く）",meaning:"rút ra",level:"N2"},
+{kanji:"髪",hanviet:"PHÁT",on:"ハツ",kun:"かみ",meaning:"tóc",level:"N2"},
+{kanji:"箱",hanviet:"TƯƠNG",on:"ソウ",kun:"はこ",meaning:"cái hộp",level:"N2"},
+{kanji:"肌",hanviet:"CƠ",on:"キ",kun:"はだ",meaning:"da thịt",level:"N2"},
+{kanji:"麦",hanviet:"MẠCH",on:"バク",kun:"むぎ",meaning:"lúa mạch",level:"N2"},
+{kanji:"爆",hanviet:"BẠO",on:"バク",kun:"は（ぜる）",meaning:"phát nổ",level:"N2"},
+{kanji:"薄",hanviet:"BẠC",on:"ハク",kun:"うす（い）",meaning:"mỏng manh",level:"N2"},
+{kanji:"倍",hanviet:"BỘI",on:"バイ",kun:"—",meaning:"gấp bội",level:"N2"},
+{kanji:"泊",hanviet:"BẠC",on:"ハク",kun:"と（まる）",meaning:"phiêu bạc, nghỉ trọ",level:"N2"},
+{kanji:"配",hanviet:"PHỐI",on:"ハイ",kun:"くば（る）",meaning:"đôi lứa, phân phối",level:"N2"},
+{kanji:"背",hanviet:"BỐI",on:"ハイ",kun:"せ",meaning:"vai, chiều cao",level:"N2"},
+{kanji:"杯",hanviet:"BÔI",on:"ハイ",kun:"さかずき",meaning:"cái chén",level:"N2"},
+{kanji:"拝",hanviet:"BÁI",on:"ハイ",kun:"おが（む）",meaning:"sùng bái",level:"N2"},
+{kanji:"敗",hanviet:"BẠI",on:"ハイ",kun:"やぶ（れる）",meaning:"thất bại",level:"N2"},
+{kanji:"馬",hanviet:"MÃ",on:"バ",kun:"うま",meaning:"con ngựa",level:"N2"},
+{kanji:"破",hanviet:"PHÁ",on:"ハ",kun:"やぶ（る）",meaning:"phá hoại",level:"N2"},
+{kanji:"脳",hanviet:"NÃO",on:"ノウ、ドウ",kun:"—",meaning:"bộ não",level:"N2"},
+{kanji:"農",hanviet:"NÔNG",on:"ノウ",kun:"—",meaning:"làm ruộng",level:"N2"},
+{kanji:"能",hanviet:"NĂNG",on:"ノウ、ドウ",kun:"よ（く）",meaning:"khả năng",level:"N2"},
+{kanji:"濃",hanviet:"NÙNG",on:"ノウ",kun:"こ（い）",meaning:"nồng",level:"N2"},
+{kanji:"悩",hanviet:"NÃO",on:"ノウ",kun:"なや（む）",meaning:"khổ não",level:"N2"},
+{kanji:"念",hanviet:"NIỆM",on:"ネン",kun:"—",meaning:"ý niệm",level:"N2"},
+{kanji:"燃",hanviet:"NHIÊN",on:"ネン",kun:"も（える）",meaning:"nhiên liệu",level:"N2"},
+{kanji:"猫",hanviet:"MIÊU",on:"ビョウ",kun:"ねこ",meaning:"mèo",level:"N2"},
+{kanji:"認",hanviet:"NHẬN",on:"ニン",kun:"みと（める）",meaning:"xác nhận",level:"N2"},
+{kanji:"乳",hanviet:"NHŨ",on:"ニュウ",kun:"ちち",meaning:"cái vú, sữa",level:"N2"},
+{kanji:"難",hanviet:"NAN",on:"ナン",kun:"かた（い）",meaning:"khó khăn",level:"N2"},
+{kanji:"軟",hanviet:"NHUYỄN",on:"ナン",kun:"やわ（らか）",meaning:"mềm",level:"N2"},
+{kanji:"曇",hanviet:"ĐÀM",on:"ドン",kun:"くも（る）",meaning:"nhiều mây",level:"N2"},
+{kanji:"鈍",hanviet:"ĐỘN",on:"ドン",kun:"にぶ（い）",meaning:"chậm chạp",level:"N2"},
+{kanji:"突",hanviet:"ĐỘT",on:"トツ、カ",kun:"つ（く）",meaning:"xung đột",level:"N2"},
+{kanji:"独",hanviet:"ĐỘC",on:"ドク、トク",kun:"ひと（り）",meaning:"cô độc",level:"N2"},
+{kanji:"得",hanviet:"ĐẮC",on:"トク",kun:"え（る）",meaning:"tự đắc, thu được",level:"N2"},
+{kanji:"毒",hanviet:"ĐỘC",on:"ドク",kun:"—",meaning:"độc hại",level:"N2"},
+{kanji:"銅",hanviet:"ĐỒNG",on:"ドウ",kun:"あかがね",meaning:"đồng",level:"N2"},
+{kanji:"童",hanviet:"ĐỒNG",on:"ドウ",kun:"わらべ",meaning:"nhi đồng",level:"N2"},
+{kanji:"導",hanviet:"ĐẠO",on:"ドウ",kun:"みちび（く）",meaning:"chỉ dẫn",level:"N2"},
+{kanji:"到",hanviet:"ĐÁO",on:"トウ",kun:"いた（る）",meaning:"đến nơi",level:"N2"},
+{kanji:"逃",hanviet:"ĐÀO",on:"トウ",kun:"に（げる）",meaning:"bỏ trốn",level:"N2"},
+{kanji:"等",hanviet:"ĐẲNG",on:"トウ",kun:"ひと（しい）",meaning:"bình đẳng",level:"N2"},
+{kanji:"竹",hanviet:"TRÚC",on:"チク",kun:"たけ",meaning:"cây trúc",level:"N2"},
+{kanji:"築",hanviet:"TRÚC",on:"チク",kun:"きず（く）",meaning:"kiến trúc",level:"N2"},
+{kanji:"畜",hanviet:"SÚC",on:"チク",kun:"—",meaning:"gia súc",level:"N2"},
+{kanji:"遅",hanviet:"TRÌ",on:"チ",kun:"おそ（い）",meaning:"trì hoãn",level:"N2"},
+{kanji:"置",hanviet:"TRÍ",on:"チ",kun:"お（く）",meaning:"bố trí",level:"N2"},
+{kanji:"当",hanviet:"ĐƯƠNG",on:"トウ",kun:"あ（たる）",meaning:"điều này",level:"N2"},
+{kanji:"湯",hanviet:"THANG",on:"トウ",kun:"ゆ",meaning:"nước sôi",level:"N2"},
+{kanji:"灯",hanviet:"ĐĂNG",on:"トウ",kun:"ともしび",meaning:"cái đèn",level:"N2"},
+{kanji:"盗",hanviet:"ĐẠO",on:"トウ",kun:"ぬす（む）",meaning:"trộm cắp",level:"N2"},
+{kanji:"投",hanviet:"ĐẦU",on:"トウ",kun:"な（げる）",meaning:"ném",level:"N2"},
+{kanji:"島",hanviet:"ĐẢO",on:"トウ",kun:"しま",meaning:"hòn đảo",level:"N2"},
+{kanji:"凍",hanviet:"ĐỐNG",on:"トウ",kun:"こお（る）",meaning:"đông đặc",level:"N2"},
+{kanji:"塔",hanviet:"THÁP",on:"トウ",kun:"—",meaning:"tháp, chùa",level:"N2"},
+{kanji:"党",hanviet:"ĐẢNG",on:"トウ",kun:"なかま",meaning:"đảng",level:"N2"},
+{kanji:"倒",hanviet:"ĐẢO",on:"トウ",kun:"たお（れる）",meaning:"đổ, ngã",level:"N2"},
+{kanji:"怒",hanviet:"NỘ",on:"ド、ヌ",kun:"いか（る）",meaning:"tức giận",level:"N2"},
+{kanji:"途",hanviet:"ĐỒ",on:"ト",kun:"—",meaning:"giữa",level:"N2"},
+{kanji:"登",hanviet:"ĐĂNG",on:"トウ、ト",kun:"のぼ（る）",meaning:"leo lên",level:"N2"},
+{kanji:"渡",hanviet:"ĐỘ",on:"ト",kun:"わた（る）",meaning:"sang, vượt qua",level:"N2"},
+{kanji:"徒",hanviet:"ĐỒ",on:"ト",kun:"いたずら",meaning:"đồ đệ",level:"N2"},
+{kanji:"殿",hanviet:"ĐIỆN",on:"デン、テン",kun:"との",meaning:"cung điện",level:"N2"},
+{kanji:"塗",hanviet:"ĐỒ",on:"ト",kun:"ぬ（る）",meaning:"vẽ, quét",level:"N2"},
+{kanji:"伝",hanviet:"TRUYỀN",on:"デン、テン",kun:"つた（わる）",meaning:"di truyền",level:"N2"},
+{kanji:"点",hanviet:"ĐIỂM",on:"テン",kun:"つ（ける）",meaning:"điểm số",level:"N2"},
+{kanji:"展",hanviet:"TRIỂN",on:"テン",kun:"—",meaning:"trưng bày",level:"N2"},
+{kanji:"適",hanviet:"THÍCH",on:"テキ",kun:"かな（う）",meaning:"thích hợp",level:"N2"},
+{kanji:"鉄",hanviet:"THIẾT",on:"テツ",kun:"くろがね",meaning:"sắt, thép",level:"N2"},
+{kanji:"滴",hanviet:"TRÍCH",on:"テキ",kun:"しずく",meaning:"giọt nước",level:"N2"},
+{kanji:"泥",hanviet:"NÊ",on:"デイ",kun:"どろ",meaning:"bùn",level:"N2"},
+{kanji:"庭",hanviet:"ĐÌNH",on:"テイ",kun:"にわ",meaning:"vườn",level:"N2"},
+{kanji:"程",hanviet:"TRÌNH",on:"テイ",kun:"ほど",meaning:"mức độ",level:"N2"},
+{kanji:"停",hanviet:"ĐÌNH",on:"テイ",kun:"と（める）",meaning:"dừng",level:"N2"},
+{kanji:"追",hanviet:"TRUY",on:"ツイ",kun:"お（う）",meaning:"đuổi theo",level:"N2"},
+{kanji:"痛",hanviet:"THỐNG",on:"ツウ",kun:"いた（い）",meaning:"đau",level:"N2"},
+{kanji:"賃",hanviet:"NHẪM",on:"チン",kun:"—",meaning:"thuê",level:"N2"},
+{kanji:"珍",hanviet:"TRÂN",on:"チン",kun:"めずら（しい）",meaning:"hiếm",level:"N2"},
+{kanji:"沈",hanviet:"TRẦM",on:"チン、ジン",kun:"しず（む）",meaning:"trầm buồn, chìm",level:"N2"},
+{kanji:"頂",hanviet:"ĐỈNH",on:"チョウ",kun:"いただ（く）",meaning:"chóp, ngọn",level:"N2"},
+{kanji:"超",hanviet:"SIÊU",on:"チョウ",kun:"こ（える）",meaning:"quá, vượt",level:"N2"},
+{kanji:"調",hanviet:"ĐIỆU",on:"チョウ",kun:"しら（べる）",meaning:"nhịp điệu",level:"N2"},
+{kanji:"張",hanviet:"TRƯƠNG",on:"チョウ",kun:"は（る）",meaning:"căng ra",level:"N2"},
+{kanji:"兆",hanviet:"TRIỆU",on:"チョウ",kun:"きざ（し）",meaning:"nghìn tỉ",level:"N2"},
+{kanji:"庁",hanviet:"SẢNH",on:"チョウ、テイ",kun:"やくしょ",meaning:"cục, sở",level:"N2"},
+{kanji:"貯",hanviet:"TRỮ",on:"チョ",kun:"た（める）",meaning:"tích luỹ",level:"N2"},
+{kanji:"著",hanviet:"TRỮ",on:"チョ、チャク",kun:"あらわ（す）",meaning:"viết, xuất bản",level:"N2"},
+{kanji:"駐",hanviet:"TRÚ",on:"チュウ",kun:"—",meaning:"cư trú, đậu xe",level:"N2"},
+{kanji:"柱",hanviet:"TRỤ",on:"チュウ",kun:"はしら",meaning:"cột, trụ",level:"N2"},
+{kanji:"宙",hanviet:"TRỤ",on:"チュウ",kun:"—",meaning:"không gian",level:"N2"},
+{kanji:"仲",hanviet:"TRỌNG",on:"チュウ",kun:"なか",meaning:"mối quan hệ",level:"N2"},
+{kanji:"恥",hanviet:"SỈ",on:"チ",kun:"は（じる）",meaning:"xấu hổ",level:"N2"},
+{kanji:"談",hanviet:"ĐÀM",on:"ダン",kun:"—",meaning:"bàn bạc",level:"N2"},
+{kanji:"値",hanviet:"TRỊ",on:"チ",kun:"ね",meaning:"giá trị",level:"N2"},
+{kanji:"段",hanviet:"ĐOẠN",on:"ダン、タン",kun:"—",meaning:"giai đoạn",level:"N2"},
+{kanji:"暖",hanviet:"NOÃN",on:"ダン、ノン",kun:"あたた（か）",meaning:"ấm áp",level:"N2"},
+{kanji:"断",hanviet:"ĐOẠN",on:"ダン",kun:"た（つ）",meaning:"gián đoạn",level:"N2"},
+{kanji:"炭",hanviet:"THÁN",on:"タン",kun:"すみ",meaning:"than",level:"N2"},
+{kanji:"団",hanviet:"ĐOÀN",on:"ダン、トン",kun:"かたまり",meaning:"đoàn thể",level:"N2"},
+{kanji:"探",hanviet:"THÁM",on:"タン",kun:"さが（す）",meaning:"tìm kiếm",level:"N2"},
+{kanji:"担",hanviet:"ĐAM",on:"タン",kun:"かつ（ぐ）",meaning:"đảm đương",level:"N2"},
+{kanji:"達",hanviet:"ĐẠT",on:"タツ、ダ",kun:"—",meaning:"thành đạt",level:"N2"},
+{kanji:"谷",hanviet:"CỐC",on:"コク",kun:"たに",meaning:"hang, thung lũng",level:"N2"},
+{kanji:"濯",hanviet:"TRẠC",on:"タク",kun:"すす（ぐ）",meaning:"giặt giũ",level:"N2"},
+{kanji:"宅",hanviet:"TRẠCH",on:"タク",kun:"—",meaning:"nhà ở",level:"N2"},
+{kanji:"第",hanviet:"ĐỆ",on:"ダイ、テイ",kun:"—",meaning:"thứ tự",level:"N2"},
+{kanji:"袋",hanviet:"ĐẠI",on:"タイ、ダイ",kun:"ふくろ",meaning:"cái túi",level:"N2"},
+{kanji:"退",hanviet:"THỐI",on:"タイ",kun:"しりぞ（く）",meaning:"rút lui",level:"N2"},
+{kanji:"替",hanviet:"THẾ",on:"タイ",kun:"か（える）",meaning:"thay thế",level:"N2"},
+{kanji:"帯",hanviet:"ĐỚI",on:"タイ",kun:"お（びる）",meaning:"nhiệt đới",level:"N2"},
+{kanji:"対",hanviet:"ĐỐI",on:"タイ、ツイ",kun:"むか（う）",meaning:"phản đối",level:"N2"},
+{kanji:"打",hanviet:"ĐẢ",on:"ダ",kun:"う（つ）",meaning:"đánh đập",level:"N2"},
+{kanji:"損",hanviet:"TỔN",on:"ソン",kun:"そこ（なう）",meaning:"tổn hại",level:"N2"},
+{kanji:"尊",hanviet:"TÔN",on:"ソン",kun:"たっと（い）",meaning:"tôn trọng",level:"N2"},
+{kanji:"孫",hanviet:"TÔN",on:"ソン",kun:"まご",meaning:"con cháu",level:"N2"},
+{kanji:"卒",hanviet:"TỐT",on:"ソツ、シュツ",kun:"そっ（する）",meaning:"tốt nghiệp",level:"N2"},
+{kanji:"存",hanviet:"TỒN",on:"ソン、ゾン",kun:"—",meaning:"tồn tại",level:"N2"},
+{kanji:"速",hanviet:"TỐC",on:"ソク",kun:"はや（い）",meaning:"tốc độ",level:"N2"},
+{kanji:"測",hanviet:"TRẮC",on:"ソク",kun:"はか（る）",meaning:"đo lường",level:"N2"},
+{kanji:"息",hanviet:"TỨC",on:"ソク",kun:"いき",meaning:"hơi thở",level:"N2"},
+{kanji:"束",hanviet:"THÚC",on:"ソク",kun:"たば",meaning:"buộc lại",level:"N2"},
+{kanji:"則",hanviet:"TẮC",on:"ソク",kun:"のっと（る）",meaning:"quy tắc",level:"N2"},
+{kanji:"側",hanviet:"TRẮC",on:"ソク",kun:"かわ",meaning:"mặt bên",level:"N2"},
+{kanji:"造",hanviet:"TẠO",on:"ゾウ",kun:"つく（る）",meaning:"chế tạo",level:"N2"},
+{kanji:"蔵",hanviet:"TÀNG",on:"ゾウ、ソウ",kun:"くら",meaning:"tàng trữ",level:"N2"},
+{kanji:"贈",hanviet:"TẶNG",on:"ゾウ、ソウ",kun:"おく（る）",meaning:"đưa tặng",level:"N2"},
+{kanji:"臓",hanviet:"TẠNG",on:"ゾウ",kun:"はらわた",meaning:"nội tạng",level:"N2"},
+{kanji:"憎",hanviet:"TĂNG",on:"ゾウ",kun:"にく（む）",meaning:"căm ghét",level:"N2"},
+{kanji:"増",hanviet:"TĂNG",on:"ゾウ",kun:"ふ（える）",meaning:"tăng",level:"N2"},
+{kanji:"装",hanviet:"TRANG",on:"ソウ、ショウ",kun:"よそお（う）",meaning:"chỉnh trang",level:"N2"},
+{kanji:"像",hanviet:"TƯỢNG",on:"ゾウ",kun:"—",meaning:"hình ảnh",level:"N2"},
+{kanji:"総",hanviet:"TỔNG",on:"ソウ",kun:"す（べて）",meaning:"tổng",level:"N2"},
+{kanji:"窓",hanviet:"SONG",on:"ソウ、ス",kun:"まど",meaning:"cửa sổ",level:"N2"},
+{kanji:"操",hanviet:"THAO",on:"ソウ、サン",kun:"あやつ（る）",meaning:"thao tác",level:"N2"},
+{kanji:"燥",hanviet:"TÁO",on:"ソウ",kun:"はしゃ（ぐ）",meaning:"khô hạn",level:"N2"},
+{kanji:"相",hanviet:"TƯƠNG",on:"ソウ、ショウ",kun:"あい",meaning:"lẫn nhau",level:"N2"},
+{kanji:"争",hanviet:"TRANH",on:"ソウ",kun:"あらそ（う）",meaning:"cạnh tranh",level:"N2"},
+{kanji:"双",hanviet:"CHỈ",on:"ソウ",kun:"ふた",meaning:"đôi",level:"N2"},
+{kanji:"掃",hanviet:"TẢO",on:"ソウ、シュ",kun:"は（く）",meaning:"quét tước",level:"N2"},
+{kanji:"想",hanviet:"TƯỞNG",on:"ソウ、ソ",kun:"おも（う）",meaning:"suy nghĩ",level:"N2"},
+{kanji:"捜",hanviet:"SƯU",on:"ソウ、シュ",kun:"さが（す）",meaning:"tìm kiếm",level:"N2"},
+{kanji:"層",hanviet:"TẰNG",on:"ソウ",kun:"—",meaning:"tầng lớp",level:"N2"},
+{kanji:"組",hanviet:"TỔ",on:"ソ",kun:"く（む）",meaning:"bộ, tổ",level:"N2"},
+{kanji:"祖",hanviet:"TỔ",on:"ソ",kun:"—",meaning:"tổ tiên",level:"N2"},
+{kanji:"然",hanviet:"NHIÊN",on:"ゼン、ネン",kun:"しか",meaning:"tự nhiên",level:"N2"},
+{kanji:"善",hanviet:"THIỆN",on:"ゼン",kun:"よ（い）",meaning:"cải thiện",level:"N2"},
+{kanji:"選",hanviet:"TUYỂN",on:"セン",kun:"えら（ぶ）",meaning:"lựa chọn",level:"N2"},
+{kanji:"線",hanviet:"TUYẾN",on:"セン",kun:"すじ",meaning:"đường dây",level:"N2"},
+{kanji:"船",hanviet:"THUYỀN",on:"セン",kun:"ふね",meaning:"thuyền, tàu",level:"N2"},
+{kanji:"浅",hanviet:"THIỂN",on:"セン",kun:"あさ（い）",meaning:"nông, nhạt",level:"N2"},
+{kanji:"泉",hanviet:"TUYỀN",on:"セン",kun:"いずみ",meaning:"suối",level:"N2"},
+{kanji:"戦",hanviet:"CHIẾN",on:"セン",kun:"たたか（う）",meaning:"trận chiến",level:"N2"},
+{kanji:"占",hanviet:"CHIÊM",on:"セン",kun:"うらな（う）",meaning:"bói toán",level:"N2"},
+{kanji:"専",hanviet:"CHUYÊN",on:"セン",kun:"もっぱ（ら）",meaning:"chuyên môn",level:"N2"},
+{kanji:"絶",hanviet:"TUYỆT",on:"ゼツ",kun:"た（える）",meaning:"chia cách",level:"N2"},
+{kanji:"雪",hanviet:"TUYẾT",on:"セツ",kun:"ゆき",meaning:"tuyết",level:"N2"},
+{kanji:"節",hanviet:"TIẾT",on:"セツ、セチ",kun:"ふし",meaning:"mùa",level:"N2"},
+{kanji:"折",hanviet:"CHIẾT",on:"セツ",kun:"お（る）",meaning:"gãy, gập",level:"N2"},
+{kanji:"設",hanviet:"THIẾT",on:"セツ",kun:"もう（ける）",meaning:"thiết lập",level:"N2"},
+{kanji:"接",hanviet:"TIẾP",on:"セツ、ショウ",kun:"つ（ぐ）",meaning:"tiếp xúc",level:"N2"},
+{kanji:"責",hanviet:"TRÁCH",on:"セキ",kun:"せ（める）",meaning:"trách nhiệm",level:"N2"},
+{kanji:"績",hanviet:"TÍCH",on:"セキ",kun:"—",meaning:"thành tích",level:"N2"},
+{kanji:"積",hanviet:"TÍCH",on:"セキ",kun:"つ（む）",meaning:"tích góp",level:"N2"},
+{kanji:"昔",hanviet:"TÍCH",on:"セキ、シャク",kun:"むかし",meaning:"xa xưa",level:"N2"},
+{kanji:"席",hanviet:"TỊCH",on:"セキ",kun:"むしろ",meaning:"chỗ ngồi",level:"N2"},
+{kanji:"税",hanviet:"THUẾ",on:"ゼイ",kun:"—",meaning:"thuế má",level:"N2"},
+{kanji:"製",hanviet:"CHẾ",on:"セイ",kun:"—",meaning:"chế tạo",level:"N2"},
+{kanji:"静",hanviet:"TĨNH",on:"セイ、ジョウ",kun:"しず（か）",meaning:"yên tĩnh",level:"N2"},
+{kanji:"精",hanviet:"TINH",on:"セイ、ショウ",kun:"—",meaning:"tinh thần",level:"N2"},
+{kanji:"清",hanviet:"THANH",on:"セイ、ショウ",kun:"きよ（い）",meaning:"trong sạch",level:"N2"},
+{kanji:"晴",hanviet:"TÌNH",on:"セイ",kun:"は（れる）",meaning:"không mưa",level:"N2"},
+{kanji:"整",hanviet:"CHỈNH",on:"セイ",kun:"ととの（える）",meaning:"chỉnh sửa",level:"N2"},
+{kanji:"政",hanviet:"CHÍNH",on:"セイ、ショウ",kun:"まつりごと",meaning:"chính phủ",level:"N2"},
+{kanji:"成",hanviet:"THÀNH",on:"セイ、ジョウ",kun:"な（る）",meaning:"hoàn thành",level:"N2"},
+{kanji:"性",hanviet:"TÍNH",on:"セイ、ショウ",kun:"さが",meaning:"tính cách",level:"N2"},
+{kanji:"勢",hanviet:"THẾ",on:"セイ、ゼイ",kun:"いきお（い）",meaning:"uy thế",level:"N2"},
+{kanji:"制",hanviet:"CHẾ",on:"セイ",kun:"—",meaning:"thể chế",level:"N2"},
+{kanji:"吹",hanviet:"XUY",on:"スイ",kun:"ふ（く）",meaning:"thổi",level:"N2"},
+{kanji:"針",hanviet:"CHÂM",on:"シン",kun:"はり",meaning:"cây kim",level:"N2"},
+{kanji:"震",hanviet:"CHẤN",on:"シン",kun:"ふる（える）",meaning:"rung, động đất",level:"N2"},
+{kanji:"辛",hanviet:"TÂN",on:"シン",kun:"から（い）",meaning:"cay, khổ",level:"N2"},
+{kanji:"臣",hanviet:"THẦN",on:"シン、ジン",kun:"—",meaning:"bầy tôi",level:"N2"},
+{kanji:"申",hanviet:"THÂN",on:"シン",kun:"もう（す）",meaning:"bày tỏ",level:"N2"},
+{kanji:"神",hanviet:"THẦN",on:"シン、ジン",kun:"かみ",meaning:"thần kinh",level:"N2"},
+{kanji:"深",hanviet:"THÂM",on:"シン",kun:"ふか（い）",meaning:"bề sâu",level:"N2"},
+{kanji:"寝",hanviet:"TẨM",on:"シン",kun:"ね（る）",meaning:"đi ngủ",level:"N2"},
+{kanji:"信",hanviet:"TÍN",on:"シン",kun:"—",meaning:"uy tín",level:"N2"},
+{kanji:"触",hanviet:"XÚC",on:"ショク",kun:"ふ（れる）",meaning:"cảm xúc, chạm",level:"N2"},
+{kanji:"伸",hanviet:"THÂN",on:"シン",kun:"の（びる）",meaning:"kéo duỗi",level:"N2"},
+{kanji:"職",hanviet:"CHỨC",on:"ショク、ソク",kun:"—",meaning:"chức vụ",level:"N2"},
+{kanji:"植",hanviet:"THỰC",on:"ショク",kun:"う（える）",meaning:"trồng cây",level:"N2"},
+{kanji:"蒸",hanviet:"CHƯNG",on:"ジョウ",kun:"む（す）",meaning:"chưng cất",level:"N2"},
+{kanji:"状",hanviet:"TRẠNG",on:"ジョウ",kun:"—",meaning:"trạng thái",level:"N2"},
+{kanji:"畳",hanviet:"ĐIỆP",on:"ジョウ、チョウ",kun:"たたみ",meaning:"chiếu ngủ",level:"N2"},
+{kanji:"条",hanviet:"ĐIỀU",on:"ジョウ、チョウ",kun:"えだ",meaning:"điều kiện",level:"N2"},
+{kanji:"情",hanviet:"TÌNH",on:"ジョウ、セイ",kun:"なさ（け）",meaning:"tình cảm",level:"N2"},
+{kanji:"常",hanviet:"THƯỜNG",on:"ジョウ",kun:"つね",meaning:"bình thường",level:"N2"},
+{kanji:"賞",hanviet:"THƯỞNG",on:"ショウ",kun:"ほ（める）",meaning:"khen thưởng",level:"N2"},
+{kanji:"城",hanviet:"THÀNH",on:"ジョウ",kun:"しろ",meaning:"thành lũy",level:"N2"},
+{kanji:"象",hanviet:"TƯỢNG",on:"ショウ、ゾウ",kun:"かたど（る）",meaning:"ấn tượng",level:"N2"},
+{kanji:"紹",hanviet:"THIỆU",on:"ショウ",kun:"—",meaning:"giới thiệu",level:"N2"},
+{kanji:"笑",hanviet:"TIẾU",on:"ショウ",kun:"わら（う）",meaning:"cười",level:"N2"},
+{kanji:"省",hanviet:"TỈNH",on:"セイ、ショウ",kun:"かえり（みる）",meaning:"coi xét",level:"N2"},
+{kanji:"章",hanviet:"CHƯƠNG",on:"ショウ",kun:"—",meaning:"văn chương",level:"N2"},
+{kanji:"照",hanviet:"CHIẾU",on:"ショウ",kun:"て（る）",meaning:"chiếu sáng",level:"N2"},
+{kanji:"焼",hanviet:"THIÊU",on:"ショウ",kun:"や（く）",meaning:"thiêu đốt",level:"N2"},
+{kanji:"将",hanviet:"TƯƠNG",on:"ショウ、ソウ",kun:"まさ（に）",meaning:"tướng quân",level:"N2"},
+{kanji:"召",hanviet:"TRIỆU",on:"ショウ",kun:"め（す）",meaning:"mời, gọi",level:"N2"},
+{kanji:"商",hanviet:"THƯƠNG",on:"ショウ",kun:"あきな（う）",meaning:"thương mại",level:"N2"},
+{kanji:"除",hanviet:"TRỪ",on:"ジョ、ジ",kun:"のぞ（く）",meaning:"trừ, loại bỏ",level:"N2"},
+{kanji:"助",hanviet:"TRỢ",on:"ジョ",kun:"たす（ける）",meaning:"giúp đỡ",level:"N2"},
+{kanji:"署",hanviet:"THƯ",on:"ショ",kun:"—",meaning:"đồn, sở",level:"N2"},
+{kanji:"諸",hanviet:"CHƯ",on:"ショ",kun:"もろ",meaning:"các, nhiều",level:"N2"},
+{kanji:"緒",hanviet:"TỰ",on:"ショ、チョ",kun:"お",meaning:"cùng nhau",level:"N2"},
+{kanji:"初",hanviet:"SƠ",on:"ショ",kun:"はじ（め）",meaning:"đầu tiên, mới",level:"N2"},
+{kanji:"処",hanviet:"XỨ",on:"ショ",kun:"ところ",meaning:"quản lí, xử lí",level:"N2"},
+{kanji:"純",hanviet:"THUẦN",on:"ジュン",kun:"—",meaning:"đơn thuần",level:"N2"},
+{kanji:"順",hanviet:"THUẬN",on:"ジュン",kun:"—",meaning:"thứ tự",level:"N2"},
+{kanji:"準",hanviet:"CHUẨN",on:"ジュン",kun:"じゅん（じる）",meaning:"chuẩn bị",level:"N2"},
+{kanji:"述",hanviet:"THUẬT",on:"ジュツ",kun:"の（べる）",meaning:"tường thuật",level:"N2"},
+{kanji:"術",hanviet:"THUẬT",on:"ジュツ",kun:"すべ",meaning:"kĩ thuật",level:"N2"},
+{kanji:"宿",hanviet:"TÚC",on:"シュク",kun:"やど",meaning:"chỗ trọ",level:"N2"},
+{kanji:"祝",hanviet:"CHÚC",on:"シュク、シュウ",kun:"いわ（う）",meaning:"chúc mừng",level:"N2"},
+{kanji:"柔",hanviet:"NHU",on:"ジュウ、ニュウ",kun:"やわ（らか）",meaning:"mềm dẻo",level:"N2"},
+{kanji:"舟",hanviet:"CHU",on:"シュウ",kun:"ふね",meaning:"thuyền",level:"N2"},
+{kanji:"糸",hanviet:"MỊCH",on:"シ",kun:"いと",meaning:"chuỗi, sợi",level:"N2"},
+{kanji:"支",hanviet:"CHI",on:"シ",kun:"ささ（える）",meaning:"nhánh, hỗ trợ",level:"N2"},
+{kanji:"枝",hanviet:"CHI",on:"シ",kun:"えだ",meaning:"cành cây",level:"N2"},
+{kanji:"指",hanviet:"CHỈ",on:"シ",kun:"ゆび",meaning:"ngón tay",level:"N2"},
+{kanji:"志",hanviet:"CHÍ",on:"シ",kun:"こころざ（す）",meaning:"ý muốn",level:"N2"},
+{kanji:"師",hanviet:"SƯ",on:"シ",kun:"—",meaning:"người thầy",level:"N2"},
+{kanji:"司",hanviet:"TI",on:"シ",kun:"つかさど（る）",meaning:"chủ trì",level:"N2"},
+{kanji:"史",hanviet:"SỬ",on:"シ",kun:"—",meaning:"lịch sử",level:"N2"},
+{kanji:"残",hanviet:"TÀN",on:"ザン、サン",kun:"のこ（る）",meaning:"còn lại",level:"N2"},
+{kanji:"算",hanviet:"TOÁN",on:"サン",kun:"そろ",meaning:"tính toán",level:"N2"},
+{kanji:"賛",hanviet:"TÁN",on:"サン",kun:"たす（ける）",meaning:"tán thành",level:"N2"},
+{kanji:"散",hanviet:"TÁN",on:"サン",kun:"ち（る）",meaning:"phân tán",level:"N2"},
+{kanji:"参",hanviet:"THAM",on:"サン、シン",kun:"まい（る）",meaning:"tham gia",level:"N2"},
+{kanji:"皿",hanviet:"MÃNH",on:"ベイ",kun:"さら",meaning:"đĩa",level:"N2"},
+{kanji:"殺",hanviet:"SÁT",on:"サツ、サイ",kun:"ころ（す）",meaning:"sát nhân",level:"N2"},
+{kanji:"雑",hanviet:"TẠP",on:"ザツ、ゾウ",kun:"まじ（える）",meaning:"tạp, phức tạp",level:"N2"},
+{kanji:"札",hanviet:"TRÁT",on:"サツ",kun:"ふだ",meaning:"tờ, tấm",level:"N2"},
+{kanji:"察",hanviet:"SÁT",on:"サツ",kun:"—",meaning:"quan sát",level:"N2"},
+{kanji:"刷",hanviet:"XOÁT",on:"サツ",kun:"す（る）",meaning:"in ấn",level:"N2"},
+{kanji:"昨",hanviet:"TẠC",on:"サク",kun:"—",meaning:"trước đó",level:"N2"},
+{kanji:"冊",hanviet:"SÁCH",on:"サツ、サク",kun:"—",meaning:"tập, quyển",level:"N2"},
+{kanji:"坂",hanviet:"PHẢN",on:"ハン",kun:"さか",meaning:"con dốc",level:"N2"},
+{kanji:"財",hanviet:"TÀI",on:"ザイ、サイ",kun:"—",meaning:"tài sản",level:"N2"},
+{kanji:"材",hanviet:"TÀI",on:"ザイ",kun:"—",meaning:"tài năng, vật liệu",level:"N2"},
+{kanji:"罪",hanviet:"TỘI",on:"ザイ",kun:"つみ",meaning:"tội lỗi",level:"N2"},
+{kanji:"在",hanviet:"TẠI",on:"ザイ",kun:"あ（る）",meaning:"hiện tại",level:"N2"},
+{kanji:"際",hanviet:"TẾ",on:"サイ",kun:"きわ",meaning:"rìa, bên cạnh",level:"N2"},
+{kanji:"拾",hanviet:"THẬP",on:"シュウ、ジュウ",kun:"ひろ（う）",meaning:"thu thập",level:"N2"},
+{kanji:"州",hanviet:"ÂU",on:"シュウ、ス",kun:"す",meaning:"châu Âu",level:"N2"},
+{kanji:"修",hanviet:"TU",on:"シュウ、シュ",kun:"おさ（める）",meaning:"tu sửa",level:"N2"},
+{kanji:"周",hanviet:"CHU",on:"シュウ",kun:"まわ（り）",meaning:"chu vi",level:"N2"},
+{kanji:"収",hanviet:"THU",on:"シュウ",kun:"おさ（める）",meaning:"thu nhập",level:"N2"},
+{kanji:"授",hanviet:"THỤ",on:"ジュ",kun:"さず（ける）",meaning:"truyền thụ",level:"N2"},
+{kanji:"酒",hanviet:"TỬU",on:"シュ",kun:"さけ",meaning:"rượu",level:"N2"},
+{kanji:"受",hanviet:"THỤ",on:"ジュ",kun:"う（ける）",meaning:"hưởng thụ",level:"N2"},
+{kanji:"種",hanviet:"CHỦNG",on:"シュ",kun:"たね",meaning:"giống loài",level:"N2"},
+{kanji:"守",hanviet:"THỦ",on:"シュ、ス",kun:"まも（る）",meaning:"bảo vệ",level:"N2"},
+{kanji:"取",hanviet:"THỦ",on:"シュ",kun:"と（る）",meaning:"chịu lấy",level:"N2"},
+{kanji:"捨",hanviet:"XÁ",on:"シャ",kun:"す（てる）",meaning:"vứt bỏ",level:"N2"},
+{kanji:"若",hanviet:"NHƯỢC",on:"ジャク",kun:"わか（い）",meaning:"trẻ bỏng",level:"N2"},
+{kanji:"湿",hanviet:"THẤP",on:"シツ、シュウ",kun:"しめ（る）",meaning:"ẩm thấp",level:"N2"},
+{kanji:"失",hanviet:"THẤT",on:"シツ",kun:"うしな（う）",meaning:"thất lạc",level:"N2"},
+{kanji:"識",hanviet:"THỨC",on:"シキ",kun:"—",meaning:"ý thức",level:"N2"},
+{kanji:"辞",hanviet:"TỪ",on:"ジ",kun:"や（める）",meaning:"từ bỏ",level:"N2"},
+{kanji:"示",hanviet:"THỊ",on:"ジ、シ",kun:"しめ（す）",meaning:"biểu thị",level:"N2"},
+{kanji:"治",hanviet:"TRỊ",on:"ジ、チ",kun:"おさ（める）",meaning:"điều trị",level:"N2"},
+{kanji:"寺",hanviet:"TỰ",on:"ジ",kun:"てら",meaning:"chùa",level:"N2"},
+{kanji:"次",hanviet:"THỨ",on:"ジ、シ",kun:"つ（ぐ）",meaning:"lần lượt",level:"N2"},
+{kanji:"児",hanviet:"NHI",on:"ジ、ニ",kun:"こ",meaning:"nhi đồng",level:"N2"},
+{kanji:"似",hanviet:"TỰ",on:"ジ",kun:"に（る）",meaning:"giống như",level:"N2"},
+{kanji:"歯",hanviet:"XỈ",on:"シ",kun:"は",meaning:"răng",level:"N2"},
+{kanji:"誌",hanviet:"CHÍ",on:"シ",kun:"—",meaning:"ghi nhớ, tạp chí",level:"N2"},
+{kanji:"資",hanviet:"TƯ",on:"シ",kun:"—",meaning:"đầu tư",level:"N2"},
+{kanji:"詞",hanviet:"TỪ",on:"シ",kun:"—",meaning:"lời văn",level:"N2"},
+{kanji:"脂",hanviet:"CHI",on:"シ",kun:"あぶら",meaning:"mỡ",level:"N2"},
+{kanji:"枯",hanviet:"KHÔ",on:"コ",kun:"か（れる）",meaning:"khô héo",level:"N2"},
+{kanji:"戸",hanviet:"HỘ",on:"コ",kun:"と",meaning:"hộ khẩu",level:"N2"},
+{kanji:"故",hanviet:"CỐ",on:"コ",kun:"ゆえ",meaning:"cố tình",level:"N2"},
+{kanji:"庫",hanviet:"KHỐ",on:"コ、ク",kun:"くら",meaning:"cái kho",level:"N2"},
+{kanji:"固",hanviet:"CỐ",on:"コ",kun:"かた（める）",meaning:"cố chấp",level:"N2"},
+{kanji:"呼",hanviet:"HÔ",on:"コ",kun:"よ（ぶ）",meaning:"kêu to",level:"N2"},
+{kanji:"限",hanviet:"HẠN",on:"ゲン",kun:"かぎ（る）",meaning:"giới hạn",level:"N2"},
+{kanji:"個",hanviet:"CÁ",on:"コ、カ",kun:"—",meaning:"cá nhân",level:"N2"},
+{kanji:"現",hanviet:"HIỆN",on:"ゲン",kun:"あらわ（れる）",meaning:"biểu hiện",level:"N2"},
+{kanji:"減",hanviet:"GIẢM",on:"ゲン",kun:"へ（る）",meaning:"suy giảm",level:"N2"},
+{kanji:"原",hanviet:"NGUYÊN",on:"ゲン",kun:"はら",meaning:"thảo nguyên",level:"N2"},
+{kanji:"軒",hanviet:"HIÊN",on:"ケン",kun:"のき",meaning:"mái hiên",level:"N2"},
+{kanji:"険",hanviet:"HIỂM",on:"ケン",kun:"けわ（しい）",meaning:"nguy hiểm",level:"N2"},
+{kanji:"賢",hanviet:"HIỀN",on:"ケン",kun:"かしこ（い）",meaning:"thông minh",level:"N2"},
+{kanji:"肩",hanviet:"KIÊN",on:"ケン",kun:"かた",meaning:"vai, gánh vác",level:"N2"},
+{kanji:"権",hanviet:"QUYỀN",on:"ケン、ゴン",kun:"—",meaning:"quyền lợi",level:"N2"},
+{kanji:"券",hanviet:"KHOÁN",on:"ケン",kun:"—",meaning:"chứng khoán, vé",level:"N2"},
+{kanji:"検",hanviet:"KIỂM",on:"ケン",kun:"しら（べる）",meaning:"kiểm tra",level:"N2"},
+{kanji:"健",hanviet:"KIỆN",on:"ケン",kun:"すこ（やか）",meaning:"khỏe khoắn",level:"N2"},
+{kanji:"件",hanviet:"KIỆN",on:"ケン",kun:"くだん",meaning:"điều kiện",level:"N2"},
+{kanji:"血",hanviet:"HUYẾT",on:"ケツ",kun:"ち",meaning:"máu",level:"N2"},
+{kanji:"決",hanviet:"QUYẾT",on:"ケツ",kun:"き（める）",meaning:"quyết định",level:"N2"},
+{kanji:"結",hanviet:"KẾT",on:"ケツ、ケチ",kun:"むす（ぶ）",meaning:"liên kết",level:"N2"},
+{kanji:"欠",hanviet:"KHIẾM",on:"ケツ、ケン",kun:"か（ける）",meaning:"thiếu sót",level:"N2"},
+{kanji:"劇",hanviet:"KỊCH",on:"ゲキ",kun:"—",meaning:"trò đùa, kịch",level:"N2"},
+{kanji:"迎",hanviet:"NGHÊNH",on:"ゲイ",kun:"むか（える）",meaning:"hoan nghênh",level:"N2"},
+{kanji:"警",hanviet:"CẢNH",on:"ケイ",kun:"いまし（める）",meaning:"cảnh giác",level:"N2"},
+{kanji:"芸",hanviet:"VÂN",on:"ゲイ、ウン",kun:"のり、わざ",meaning:"nghệ thuật",level:"N2"},
+{kanji:"経",hanviet:"KINH",on:"ケイ、キョウ",kun:"へ（る）",meaning:"kinh tế",level:"N2"},
+{kanji:"景",hanviet:"CẢNH",on:"ケイ",kun:"—",meaning:"phong cảnh",level:"N2"},
+{kanji:"敬",hanviet:"KÍNH",on:"ケイ、キョウ",kun:"うやま（う）",meaning:"kính trọng",level:"N2"},
+{kanji:"形",hanviet:"HÌNH",on:"ケイ、ギョウ",kun:"かたち",meaning:"hình dạng",level:"N2"},
+{kanji:"恵",hanviet:"HUỆ",on:"ケイ、エ",kun:"めぐ（む）",meaning:"ân huệ",level:"N2"},
+{kanji:"型",hanviet:"HÌNH",on:"ケイ",kun:"かた",meaning:"cái khuôn",level:"N2"},
+{kanji:"傾",hanviet:"KHUYNH",on:"ケイ",kun:"かたむ（く）",meaning:"nghiêng đổ",level:"N2"},
+{kanji:"係",hanviet:"HỆ",on:"ケイ",kun:"かか（る）",meaning:"quan hệ",level:"N2"},
+{kanji:"群",hanviet:"QUẦN",on:"グン",kun:"む（れる）",meaning:"quần thể",level:"N2"},
+{kanji:"軍",hanviet:"QUÂN",on:"グン",kun:"いくさ",meaning:"quân lính",level:"N2"},
+{kanji:"訓",hanviet:"HUẤN",on:"クン、キン",kun:"おし（える）",meaning:"dạy dỗ",level:"N2"},
+{kanji:"君",hanviet:"QUÂN",on:"クン",kun:"きみ",meaning:"vua, anh",level:"N2"},
+{kanji:"靴",hanviet:"NGOA",on:"カ",kun:"くつ",meaning:"giày dép",level:"N2"},
+{kanji:"隅",hanviet:"NGUNG",on:"グウ",kun:"すみ",meaning:"cạnh góc",level:"N2"},
+{kanji:"掘",hanviet:"QUẬT",on:"クツ",kun:"ほ（る）",meaning:"đào",level:"N2"},
+{kanji:"偶",hanviet:"NGẪU",on:"グウ",kun:"たま",meaning:"ngẫu nhiên",level:"N2"},
+{kanji:"具",hanviet:"CỤ",on:"グ",kun:"そな（える）",meaning:"dụng cụ",level:"N2"},
+{kanji:"苦",hanviet:"KHỔ",on:"ク",kun:"くる（しい）",meaning:"khổ cực",level:"N2"},
+{kanji:"均",hanviet:"QUÂN",on:"キン",kun:"なら（す）",meaning:"đồng đều",level:"N2"},
+{kanji:"玉",hanviet:"NGỌC",on:"ギョク",kun:"たま",meaning:"đá báu",level:"N2"},
+{kanji:"極",hanviet:"CỰC",on:"キョク、ゴク",kun:"きわ（める）",meaning:"cùng cực",level:"N2"},
+{kanji:"局",hanviet:"CỤC",on:"キョク",kun:"つぼね",meaning:"bộ phận",level:"N2"},
+{kanji:"曲",hanviet:"KHÚC",on:"キョク",kun:"ま（がる）",meaning:"khúc nhạc",level:"N2"},
+{kanji:"胸",hanviet:"HUNG",on:"キョウ",kun:"むね",meaning:"ngực",level:"N2"},
+{kanji:"狭",hanviet:"HIỆP",on:"キョウ、コウ",kun:"せま（い）",meaning:"nhỏ hẹp",level:"N2"},
+{kanji:"況",hanviet:"HUỐNG",on:"キョウ",kun:"まし（て）",meaning:"tình huống",level:"N2"},
+{kanji:"挟",hanviet:"HIỆP",on:"キョウ、ショウ",kun:"はさ（む）",meaning:"kẹp vào",level:"N2"},
+{kanji:"恐",hanviet:"KHỦNG",on:"キョウ",kun:"おそ（れる）",meaning:"kinh khủng",level:"N2"},
+{kanji:"境",hanviet:"CẢNH",on:"キョウ、ケイ",kun:"さかい",meaning:"cảnh ngộ",level:"N2"},
+{kanji:"叫",hanviet:"KHIẾU",on:"キョウ",kun:"さけ（ぶ）",meaning:"kêu gào",level:"N2"},
+{kanji:"競",hanviet:"CẠNH",on:"キョウ、ケイ",kun:"きそ（う）",meaning:"cạnh tranh",level:"N2"},
+{kanji:"供",hanviet:"CUNG",on:"キョウ、ク",kun:"そな（える）",meaning:"cung ứng",level:"N2"},
+{kanji:"細",hanviet:"TẾ",on:"サイ",kun:"ほそ（い）",meaning:"thon dài, mảnh",level:"N2"},
+{kanji:"済",hanviet:"TẾ",on:"サイ、セイ",kun:"す（む）",meaning:"cứu giúp",level:"N2"},
+{kanji:"祭",hanviet:"TẾ",on:"サイ",kun:"まつ（る）",meaning:"lễ hội",level:"N2"},
+{kanji:"歳",hanviet:"TUẾ",on:"サイ、セイ",kun:"とし",meaning:"tuổi",level:"N2"},
+{kanji:"採",hanviet:"THÁI",on:"サイ",kun:"と（る）",meaning:"thu, nhặt",level:"N2"},
+{kanji:"才",hanviet:"TÀI",on:"サイ",kun:"—",meaning:"tài năng",level:"N2"},
+{kanji:"妻",hanviet:"THÊ",on:"サイ",kun:"つま",meaning:"vợ",level:"N2"},
+{kanji:"砂",hanviet:"SA",on:"サ、シャ",kun:"すな",meaning:"cát",level:"N2"},
+{kanji:"差",hanviet:"SOA",on:"サ",kun:"さ（す）",meaning:"sai nhầm",level:"N2"},
+{kanji:"査",hanviet:"TRA",on:"サ",kun:"—",meaning:"kiểm tra",level:"N2"},
+{kanji:"混",hanviet:"HỖN",on:"コン",kun:"ま（じる）",meaning:"hỗn loạn",level:"N2"},
+{kanji:"根",hanviet:"CĂN",on:"コン",kun:"ね",meaning:"gốc rễ",level:"N2"},
+{kanji:"婚",hanviet:"HÔN",on:"コン",kun:"—",meaning:"kết hôn",level:"N2"},
+{kanji:"困",hanviet:"KHỐN",on:"コン",kun:"こま（る）",meaning:"khốn cùng",level:"N2"},
+{kanji:"骨",hanviet:"CỐT",on:"コツ",kun:"ほね",meaning:"xương",level:"N2"},
+{kanji:"腰",hanviet:"YÊU",on:"ヨウ",kun:"こし",meaning:"lưng, eo",level:"N2"},
+{kanji:"告",hanviet:"CÁO",on:"コク",kun:"つ（げる）",meaning:"báo cáo",level:"N2"},
+{kanji:"刻",hanviet:"KHẮC",on:"コク",kun:"きざ（む）",meaning:"khoảnh khắc",level:"N2"},
+{kanji:"香",hanviet:"HƯƠNG",on:"コウ、キョウ",kun:"か",meaning:"hương thơm",level:"N2"},
+{kanji:"降",hanviet:"GIÁNG",on:"コウ、ゴ",kun:"お（りる）",meaning:"rụng xuống",level:"N2"},
+{kanji:"鉱",hanviet:"KHOÁNG",on:"コウ",kun:"あらがね",meaning:"khai khoáng",level:"N2"},
+{kanji:"講",hanviet:"GIẢNG",on:"コウ",kun:"—",meaning:"giảng giải",level:"N2"},
+{kanji:"郊",hanviet:"GIAO",on:"コウ",kun:"—",meaning:"ngoại thành",level:"N2"},
+{kanji:"荒",hanviet:"HOANG",on:"コウ",kun:"あら（い）",meaning:"bỏ hoang",level:"N2"},
+{kanji:"航",hanviet:"HÀNG",on:"コウ",kun:"—",meaning:"hàng không",level:"N2"},
+{kanji:"肯",hanviet:"KHẲNG",on:"コウ",kun:"がえんじ（る）",meaning:"khẳng định",level:"N2"},
+{kanji:"紅",hanviet:"HỒNG",on:"コウ、ク",kun:"べに",meaning:"màu đỏ",level:"N2"},
+{kanji:"耕",hanviet:"CANH",on:"コウ",kun:"たがや（す）",meaning:"canh tác",level:"N2"},
+{kanji:"硬",hanviet:"NGẠNH",on:"コウ",kun:"かた（い）",meaning:"cứng rắn",level:"N2"},
+{kanji:"港",hanviet:"CẢNG",on:"コウ",kun:"みなと",meaning:"hải cảng",level:"N2"},
+{kanji:"構",hanviet:"CẤU",on:"コウ",kun:"かま（える）",meaning:"kết cấu",level:"N2"},
+{kanji:"康",hanviet:"KHANG",on:"コウ",kun:"—",meaning:"mạnh khoẻ",level:"N2"},
+{kanji:"更",hanviet:"CANH",on:"コウ",kun:"さら（に）",meaning:"cải thiện",level:"N2"},
+{kanji:"幸",hanviet:"HẠNH",on:"コウ",kun:"しあわ（せ）",meaning:"hạnh phúc",level:"N2"},
+{kanji:"向",hanviet:"HƯỚNG",on:"コウ",kun:"む（く）",meaning:"hướng",level:"N2"},
+{kanji:"厚",hanviet:"HẬU",on:"コウ",kun:"あつ（い）",meaning:"độ dày",level:"N2"},
+{kanji:"公",hanviet:"CÔNG",on:"コウ、ク",kun:"おおやけ",meaning:"công cộng",level:"N2"},
+{kanji:"効",hanviet:"HIỆU",on:"コウ",kun:"き（く）",meaning:"hiệu quả",level:"N2"},
+{kanji:"候",hanviet:"HẬU",on:"コウ",kun:"そうろう",meaning:"khí hậu",level:"N2"},
+{kanji:"交",hanviet:"GIAO",on:"コウ",kun:"まじ（わる）",meaning:"lẫn nhau",level:"N2"},
+{kanji:"誤",hanviet:"NGỘ",on:"ゴ",kun:"あやま（る）",meaning:"sai khác",level:"N2"},
+{kanji:"互",hanviet:"HỖ",on:"ゴ",kun:"たが（い）",meaning:"hỗ trợ",level:"N2"},
+{kanji:"御",hanviet:"NGỰ",on:"ギョ、ゴ",kun:"おん",meaning:"cầm cương",level:"N2"},
+{kanji:"雇",hanviet:"CỐ",on:"コ",kun:"やと（う）",meaning:"thuê",level:"N2"},
+{kanji:"湖",hanviet:"HỒ",on:"コ",kun:"みずうみ",meaning:"hồ",level:"N2"},
+{kanji:"可",hanviet:"KHẢ",on:"カ、コク",kun:"—",meaning:"khả năng",level:"N2"},
+{kanji:"価",hanviet:"GIÁ",on:"カ、ケ",kun:"あたい",meaning:"giá cả",level:"N2"},
+{kanji:"仮",hanviet:"GIẢ",on:"カ、ケ",kun:"かり",meaning:"giả sử",level:"N2"},
+{kanji:"温",hanviet:"ÔN",on:"オン",kun:"あたた（か）",meaning:"ôn hoà",level:"N2"},
+{kanji:"黄",hanviet:"HOÀNG",on:"コウ、オウ",kun:"き",meaning:"màu vàng",level:"N2"},
+{kanji:"億",hanviet:"ỨC",on:"オク",kun:"—",meaning:"trăm triệu",level:"N2"},
+{kanji:"王",hanviet:"VƯƠNG",on:"オウ",kun:"—",meaning:"vương miện",level:"N2"},
+{kanji:"欧",hanviet:"ÂU",on:"オウ",kun:"うた（う）",meaning:"châu Âu",level:"N2"},
+{kanji:"横",hanviet:"HOÀNH",on:"オウ",kun:"よこ",meaning:"bề ngang",level:"N2"},
+{kanji:"応",hanviet:"ỨNG",on:"オウ、ヨウ",kun:"こた（える）",meaning:"đáp ứng",level:"N2"},
+{kanji:"押",hanviet:"ÁP",on:"オウ",kun:"お（す）",meaning:"đẩy, sức ép",level:"N2"},
+{kanji:"奥",hanviet:"ÁO",on:"オウ、オク",kun:"おく",meaning:"bên trong",level:"N2"},
+{kanji:"央",hanviet:"ƯƠNG",on:"オウ",kun:"—",meaning:"trung ương",level:"N2"},
+{kanji:"汚",hanviet:"Ô",on:"オ",kun:"きたな（い）",meaning:"ô uế, bẩn",level:"N2"},
+{kanji:"煙",hanviet:"YÊN",on:"エン",kun:"けむり",meaning:"khói",level:"N2"},
+{kanji:"塩",hanviet:"DIÊM",on:"エン",kun:"しお",meaning:"muối",level:"N2"},
+{kanji:"演",hanviet:"DIỄN",on:"エン",kun:"えん（じる）",meaning:"trình diễn",level:"N2"},
+{kanji:"延",hanviet:"DUYÊN",on:"エン",kun:"の（びる）",meaning:"trải, kéo dài",level:"N2"},
+{kanji:"園",hanviet:"VIÊN",on:"エン",kun:"その",meaning:"công viên",level:"N2"},
+{kanji:"液",hanviet:"DỊCH",on:"エキ",kun:"—",meaning:"dung dịch",level:"N2"},
+{kanji:"越",hanviet:"VIỆT",on:"エツ、オツ",kun:"こ（える）",meaning:"vượt qua",level:"N2"},
+{kanji:"鋭",hanviet:"DUỆ",on:"エイ",kun:"するど（い）",meaning:"sắc nhọn",level:"N2"},
+{kanji:"永",hanviet:"VĨNH",on:"エイ",kun:"なが（い）",meaning:"vĩnh viễn",level:"N2"},
+{kanji:"営",hanviet:"DOANH",on:"エイ",kun:"いとな（む）",meaning:"kinh doanh",level:"N2"},
+{kanji:"栄",hanviet:"VINH",on:"エイ、ヨウ",kun:"さか（える）",meaning:"vinh quang",level:"N2"},
+{kanji:"雲",hanviet:"VÂN",on:"ウン",kun:"くも",meaning:"mây",level:"N2"},
+{kanji:"羽",hanviet:"VŨ",on:"ウ",kun:"は、はね",meaning:"lông cánh",level:"N2"},
+{kanji:"宇",hanviet:"VŨ",on:"ウ",kun:"—",meaning:"vũ trụ",level:"N2"},
+{kanji:"印",hanviet:"ẤN",on:"イン",kun:"しるし",meaning:"in ấn",level:"N2"},
+{kanji:"因",hanviet:"NHÂN",on:"イン",kun:"よ（る）",meaning:"nguyên nhân",level:"N2"},
+{kanji:"域",hanviet:"VỰC",on:"イキ",kun:"—",meaning:"lĩnh vực",level:"N2"},
+{kanji:"違",hanviet:"VI",on:"イ",kun:"ちが（う）",meaning:"sai khác",level:"N2"},
+{kanji:"胃",hanviet:"VỊ",on:"イ",kun:"—",meaning:"dạ dày",level:"N2"},
+{kanji:"衣",hanviet:"Y",on:"イ、エ",kun:"ころも",meaning:"trang phục",level:"N2"},
+{kanji:"移",hanviet:"DI",on:"イ",kun:"うつ（る）",meaning:"di chuyển",level:"N2"},
+{kanji:"異",hanviet:"DỊ",on:"イ",kun:"こと（なる）",meaning:"khác biệt",level:"N2"},
+{kanji:"囲",hanviet:"VI",on:"イ",kun:"かこ（む）",meaning:"bao quanh",level:"N2"},
+{kanji:"委",hanviet:"ỦY",on:"イ",kun:"ゆだ（ねる）",meaning:"ủy thác",level:"N2"},
+{kanji:"偉",hanviet:"VĨ",on:"イ",kun:"えら（い）",meaning:"vĩ đại",level:"N2"},
+{kanji:"依",hanviet:"Y",on:"イ、エ",kun:"よ（る）",meaning:"tùy thuộc vào",level:"N2"},
+{kanji:"圧",hanviet:"ÁP",on:"アツ、エン",kun:"お（す）",meaning:"nén, áp suất",level:"N2"},
+{kanji:"案",hanviet:"ÁN",on:"アン",kun:"—",meaning:"dự án, đề xuất",level:"N2"},
+{kanji:"愛",hanviet:"ÁI",on:"アイ",kun:"いと（しい）",meaning:"tình yêu",level:"N2"},
+// ===== N1 =====
+// ── N1 bổ sung từ tài liệu AhoVN ──
+{kanji:"遭",hanviet:"TAO",on:"ソウ",kun:"あ（う）",meaning:"gặp phải tai nạn",level:"N1"},
+{kanji:"飼",hanviet:"TỰ",on:"シ",kun:"か（う）",meaning:"nuôi con vật",level:"N1"},
+{kanji:"沿",hanviet:"DUYÊN",on:"エン",kun:"そ（う）",meaning:"dọc theo, men theo",level:"N1"},
+{kanji:"添",hanviet:"THIÊM",on:"テン",kun:"そ（える）",meaning:"đi cùng, thêm vào",level:"N1"},
+{kanji:"縫",hanviet:"PHÙNG",on:"ホウ",kun:"ぬ（う）",meaning:"may, vá, khâu",level:"N1"},
+{kanji:"奪",hanviet:"ĐOẠT",on:"ダツ",kun:"うば（う）",meaning:"cướp, đoạt",level:"N1"},
+{kanji:"覆",hanviet:"PHÚC",on:"フク",kun:"おお（う）",meaning:"che, phủ, lật ngược",level:"N1"},
+{kanji:"嫌",hanviet:"HIỀM",on:"ケン",kun:"きら（う）",meaning:"ghét, không thích",level:"N1"},
+{kanji:"狂",hanviet:"CUỒNG",on:"キョウ",kun:"くる（う）",meaning:"điên, loạn, trục trặc",level:"N1"},
+{kanji:"誓",hanviet:"THỆ",on:"セイ",kun:"ちか（う）",meaning:"thề",level:"N1"},
+{kanji:"倣",hanviet:"PHỎNG",on:"ホウ",kun:"なら（う）",meaning:"bắt chước, mô phỏng",level:"N1"},
+{kanji:"従",hanviet:"TÙNG",on:"ジュウ",kun:"したが（う）",meaning:"theo, tuân theo",level:"N1"},
+{kanji:"伴",hanviet:"BẠN",on:"ハン",kun:"ともな（う）",meaning:"theo, phát sinh cùng",level:"N1"},
+{kanji:"裂",hanviet:"LIỆT",on:"レツ",kun:"さ（く）",meaning:"xé, rách",level:"N1"},
+{kanji:"敷",hanviet:"PHU",on:"フ",kun:"し（く）",meaning:"trải, lát nền",level:"N1"},
+{kanji:"炊",hanviet:"XUY",on:"スイ",kun:"た（く）",meaning:"nấu, thổi cơm",level:"N1"},
+{kanji:"就",hanviet:"TỰU",on:"シュウ",kun:"つ（く）",meaning:"bắt tay vào làm",level:"N1"},
+{kanji:"吐",hanviet:"THỔ",on:"ト",kun:"は（く）",meaning:"khạc, nôn, thổ ra",level:"N1"},
+{kanji:"履",hanviet:"LÝ",on:"リ",kun:"は（く）",meaning:"đi giày, lịch sử",level:"N1"},
+{kanji:"描",hanviet:"MIÊU",on:"ビョウ",kun:"えが（く）",meaning:"vẽ, miêu tả",level:"N1"},
+{kanji:"渇",hanviet:"KHÁ",on:"カツ",kun:"かわ（く）",meaning:"khô, khát",level:"N1"},
+{kanji:"砕",hanviet:"TÚY",on:"サイ",kun:"くだ（く）",meaning:"đập tan, phá vỡ",level:"N1"},
+{kanji:"響",hanviet:"HƯỞNG",on:"キョウ",kun:"ひび（く）",meaning:"âm hưởng, vang",level:"N1"},
+{kanji:"驚",hanviet:"KINH",on:"キョウ",kun:"おどろ（く）",meaning:"ngạc nhiên, sửng sốt",level:"N1"},
+{kanji:"輝",hanviet:"HUY",on:"キ",kun:"かがや（く）",meaning:"toả sáng, lấp lánh",level:"N1"},
+{kanji:"稼",hanviet:"GIÁ",on:"カ",kun:"かせ（ぐ）",meaning:"kiếm tiền, trồng trọt",level:"N1"},
+{kanji:"騒",hanviet:"TAO",on:"ソウ",kun:"さわ（ぐ）",meaning:"gây ồn ào, huyên náo",level:"N1"},
+{kanji:"挿",hanviet:"TẢO",on:"ソウ",kun:"さ（す）",meaning:"gắn, cài, đính",level:"N1"},
+{kanji:"致",hanviet:"TRÍ",on:"チ",kun:"いた（す）",meaning:"làm (khiêm nhường)",level:"N1"},
+{kanji:"卸",hanviet:"TẢ",on:"シャ",kun:"おろ（す）",meaning:"bán buôn",level:"N1"},
+{kanji:"崩",hanviet:"BĂNG",on:"ホウ",kun:"くず（す）",meaning:"phá huỷ, kéo đổ",level:"N1"},
+{kanji:"脅",hanviet:"HIẾP",on:"キョウ",kun:"おど（かす）",meaning:"uy hiếp, đe doạ",level:"N1"},
+{kanji:"及",hanviet:"CẬP",on:"キュウ",kun:"およ（ぶ）",meaning:"gây ra, đạt tới",level:"N1"},
+{kanji:"撃",hanviet:"KÍCH",on:"ゲキ",kun:"う（つ）",meaning:"bắn, đánh",level:"N1"},
+{kanji:"討",hanviet:"THẢO",on:"トウ",kun:"う（つ）",meaning:"thảo phạt, chinh phạt",level:"N1"},
+{kanji:"跳",hanviet:"KHIÊU",on:"チョウ",kun:"と（ぶ）",meaning:"nhảy, bật lên",level:"N1"},
+{kanji:"澄",hanviet:"TRỪNG",on:"チョウ",kun:"す（む）",meaning:"trong sáng, lắng",level:"N1"},
+{kanji:"踏",hanviet:"ĐẠP",on:"トウ",kun:"ふ（む）",meaning:"dẫm, đạp lên",level:"N1"},
+{kanji:"恨",hanviet:"HẬN",on:"コン",kun:"うら（む）",meaning:"hận, căm ghét",level:"N1"},
+{kanji:"縮",hanviet:"SÚC",on:"シュク",kun:"ちぢ（む）",meaning:"thu nhỏ, co lại",level:"N1"},
+{kanji:"刈",hanviet:"XÁC",on:"—",kun:"か（る）",meaning:"cắt, gọt, tỉa",level:"N1"},
+{kanji:"釣",hanviet:"ĐIẾU",on:"チョウ",kun:"つ（る）",meaning:"câu cá",level:"N1"},
+{kanji:"撮",hanviet:"TOÁT",on:"サツ",kun:"と（る）",meaning:"chụp ảnh",level:"N1"},
+{kanji:"彫",hanviet:"ĐIÊU",on:"チョウ",kun:"ほ（る）",meaning:"khắc, chạm, tạc",level:"N1"},
+{kanji:"盛",hanviet:"THỊNH",on:"セイ",kun:"も（る）",meaning:"làm đầy, phục vụ",level:"N1"},
+{kanji:"至",hanviet:"CHÍ",on:"シ",kun:"いた（る）",meaning:"đạt đến, tới nơi",level:"N1"},
+{kanji:"劣",hanviet:"LIỆT",on:"レツ",kun:"おと（る）",meaning:"kém, thấp kém",level:"N1"},
+{kanji:"飾",hanviet:"SỨC",on:"ショク",kun:"かざ（る）",meaning:"trang trí, tô điểm",level:"N1"},
+{kanji:"腐",hanviet:"HỦ",on:"フ",kun:"くさ（る）",meaning:"thiu, hỏng đồ ăn",level:"N1"},
+{kanji:"削",hanviet:"TƯỚC",on:"サク",kun:"けず（る）",meaning:"gọt, bào, cắt giảm",level:"N1"},
+{kanji:"茂",hanviet:"MẬU",on:"モ",kun:"しげ（る）",meaning:"rậm rạp, um tùm",level:"N1"},
+{kanji:"縛",hanviet:"PHƯỢC",on:"バク",kun:"しば（る）",meaning:"buộc, trói, ràng buộc",level:"N1"},
+{kanji:"絞",hanviet:"GIẢO",on:"コウ",kun:"しぼ（る）",meaning:"vắt, giới hạn phạm vi",level:"N1"},
+{kanji:"滑",hanviet:"HOẠT",on:"カツ",kun:"すべ（る）",meaning:"trơn, trượt",level:"N1"},
+{kanji:"迫",hanviet:"BÁCH",on:"ハク",kun:"せま（る）",meaning:"cưỡng bức, tiến sát",level:"N1"},
+{kanji:"殴",hanviet:"ÂU",on:"オウ",kun:"なぐ（る）",meaning:"đánh, đấm",level:"N1"},
+{kanji:"握",hanviet:"ÁC",on:"アク",kun:"にぎ（る）",meaning:"nắm tay",level:"N1"},
+{kanji:"濁",hanviet:"TRỌC",on:"ダク",kun:"にご（る）",meaning:"đục nước",level:"N1"},
+{kanji:"巡",hanviet:"TUẦN",on:"ジュン",kun:"めぐ（る）",meaning:"dạo quanh, đi quanh",level:"N1"},
+{kanji:"潜",hanviet:"TIỀM",on:"セン",kun:"もぐ（る）",meaning:"lặn, tiềm ẩn",level:"N1"},
+{kanji:"譲",hanviet:"NHƯỢNG",on:"ジョウ",kun:"ゆず（る）",meaning:"nhường, nhượng bộ",level:"N1"},
+{kanji:"偏",hanviet:"THIÊN",on:"ヘン",kun:"かたよ（る）",meaning:"thiên lệch, lệch",level:"N1"},
+{kanji:"煮",hanviet:"CHỮ",on:"シャ",kun:"に（る）",meaning:"nấu, đun",level:"N1"},
+{kanji:"診",hanviet:"CHẨN",on:"シン",kun:"み（る）",meaning:"chẩn đoán, khám bệnh",level:"N1"},
+{kanji:"飽",hanviet:"BÃO",on:"ホウ",kun:"あ（きる）",meaning:"chán, ngán",level:"N1"},
+{kanji:"飢",hanviet:"CƠ",on:"キ",kun:"う（える）",meaning:"thèm, khát, đói",level:"N1"},
+{kanji:"殖",hanviet:"THỰC",on:"ショク",kun:"ふ（える）",meaning:"tăng, nhân lên",level:"N1"},
+{kanji:"訴",hanviet:"TỐ",on:"ソ",kun:"うった（える）",meaning:"kiện tụng, kêu oan",level:"N1"},
+{kanji:"蓄",hanviet:"TÍCH",on:"チク",kun:"たくわ（える）",meaning:"tích trữ",level:"N1"},
+{kanji:"避",hanviet:"TỴ",on:"ヒ",kun:"さ（ける）",meaning:"tránh, lảng tránh",level:"N1"},
+{kanji:"怠",hanviet:"ĐÃI",on:"タイ",kun:"なま（ける）",meaning:"lười biếng",level:"N1"},
+{kanji:"揚",hanviet:"DƯƠNG",on:"ヨウ",kun:"あ（げる）",meaning:"thả, rán tempura",level:"N1"},
+{kanji:"焦",hanviet:"TIÊU",on:"ショウ",kun:"こ（げる）",meaning:"cháy, khê, sốt ruột",level:"N1"},
+{kanji:"妨",hanviet:"PHƯƠNG",on:"ボウ",kun:"さまた（げる）",meaning:"gây trở ngại",level:"N1"},
+{kanji:"載",hanviet:"TÁI",on:"サイ",kun:"の（せる）",meaning:"chất lên xe, đăng tải",level:"N1"},
+{kanji:"慌",hanviet:"HOẢNG",on:"コウ",kun:"あわ（てる）",meaning:"hoảng, bối rối",level:"N1"},
+{kanji:"隔",hanviet:"CÁCH",on:"カク",kun:"へだ（てる）",meaning:"phân chia, ngăn cách",level:"N1"},
+{kanji:"企",hanviet:"XÍ",on:"キ",kun:"くわだ（てる）",meaning:"dự tính, kế hoạch",level:"N1"},
+{kanji:"兼",hanviet:"KIÊM",on:"ケン",kun:"か（ねる）",meaning:"kiêm nhiệm, kết hợp",level:"N1"},
+{kanji:"跳",hanviet:"THIÊU",on:"チョウ",kun:"は（ねる）",meaning:"bắn lên, nhảy",level:"N1"},
+{kanji:"尋",hanviet:"TẦM",on:"ジン",kun:"たず（ねる）",meaning:"hỏi, thăm hỏi",level:"N1"},
+{kanji:"締",hanviet:"ĐÌNH",on:"テイ",kun:"し（める）",meaning:"thắt, vặn chặt",level:"N1"},
+{kanji:"攻",hanviet:"CÔNG",on:"コウ",kun:"せ（める）",meaning:"tấn công",level:"N1"},
+{kanji:"褒",hanviet:"BAO",on:"ホウ",kun:"ほ（める）",meaning:"khen ngợi, tán dương",level:"N1"},
+{kanji:"納",hanviet:"NẠP",on:"ノウ",kun:"おさ（める）",meaning:"nộp, thu, cất giữ",level:"N1"},
+{kanji:"勧",hanviet:"KHUYẾN",on:"カン",kun:"すす（める）",meaning:"gợi ý, khuyến khích",level:"N1"},
+{kanji:"眺",hanviet:"THIÊU",on:"チョウ",kun:"なが（める）",meaning:"nhìn, ngắm",level:"N1"},
+{kanji:"慰",hanviet:"ÚY",on:"イ",kun:"なぐさ（める）",meaning:"an ủi, động viên",level:"N1"},
+{kanji:"揺",hanviet:"DAO",on:"ヨウ",kun:"ゆ（れる）",meaning:"rung, lắc, lay động",level:"N1"},
+{kanji:"離",hanviet:"LY",on:"リ",kun:"はな（れる）",meaning:"xa cách, rời xa",level:"N1"},
+{kanji:"舞",hanviet:"VŨ",on:"ブ",kun:"ま（う）",meaning:"cuộn, nhảy múa",level:"N1"},
+{kanji:"担",hanviet:"ĐAM",on:"タン",kun:"にな（う）",meaning:"cáng đáng, gánh vác",level:"N1"},
+{kanji:"損",hanviet:"TỔN",on:"ソン",kun:"そこ（なう）",meaning:"làm hại, thất bại",level:"N1"},
+{kanji:"恥",hanviet:"SỈ",on:"チ",kun:"は（じる）",meaning:"xấu hổ, ngượng ngùng",level:"N1"},
+{kanji:"説",hanviet:"THUYẾT",on:"セツ",kun:"と（く）",meaning:"giải thích, biện hộ",level:"N1"},
+{kanji:"築",hanviet:"TRÚC",on:"チク",kun:"きず（く）",meaning:"xây dựng",level:"N1"},
+{kanji:"背",hanviet:"BỐI",on:"ハイ",kun:"そむ（く）",meaning:"phản bội, quay lưng",level:"N1"},
+{kanji:"導",hanviet:"ĐẠO",on:"ドウ",kun:"みちび（く）",meaning:"hướng dẫn, dẫn dắt",level:"N1"},
+{kanji:"継",hanviet:"KẾ",on:"ケイ",kun:"つ（ぐ）",meaning:"thừa kế, kế tục",level:"N1"},
+{kanji:"研",hanviet:"NGHIÊN",on:"ケン",kun:"と（ぐ）",meaning:"mài, rũa",level:"N1"},
+{kanji:"志",hanviet:"CHÍ",on:"シ",kun:"こころざ（す）",meaning:"ý muốn, ước nguyện",level:"N1"},
+{kanji:"逃",hanviet:"ĐÀO",on:"トウ",kun:"のが（す）",meaning:"bỏ lỡ, để thoát",level:"N1"},
+{kanji:"果",hanviet:"QUẢ",on:"カ",kun:"は（たす）",meaning:"hoàn thành nhiệm vụ",level:"N1"},
+{kanji:"費",hanviet:"PHÍ",on:"ヒ",kun:"つい（やす）",meaning:"dùng, tiêu phí",level:"N1"},
+{kanji:"断",hanviet:"ĐOẠN",on:"ダン",kun:"た（つ）",meaning:"cắt, chấm dứt",level:"N1"},
+{kanji:"保",hanviet:"BẢO",on:"ホ",kun:"たも（つ）",meaning:"giữ, bảo vệ, duy trì",level:"N1"},
+{kanji:"尊",hanviet:"TÔN",on:"ソン",kun:"とうと（ぶ）",meaning:"quý trọng, tôn trọng",level:"N1"},
+{kanji:"生",hanviet:"SINH",on:"セイ",kun:"う（む）",meaning:"sinh, đẻ, dẫn đến",level:"N1"},
+{kanji:"富",hanviet:"PHÚ",on:"フ",kun:"と（む）",meaning:"giàu có, phong phú",level:"N1"},
+{kanji:"歩",hanviet:"BỘ",on:"ホ",kun:"あゆ（む）",meaning:"bước đi",level:"N1"},
+{kanji:"絡",hanviet:"LẠC",on:"ラク",kun:"から（む）",meaning:"cãi cọ, dính dáng",level:"N1"},
+{kanji:"恵",hanviet:"HUỆ",on:"ケイ",kun:"めぐ（む）",meaning:"cứu trợ, ban cho",level:"N1"},
+{kanji:"営",hanviet:"DOANH",on:"エイ",kun:"いとな（む）",meaning:"kinh doanh, điều khiển",level:"N1"},
+{kanji:"危",hanviet:"NGUY",on:"キ",kun:"あや（ぶむ）",meaning:"lo sợ, nguy hiểm",level:"N1"},
+{kanji:"反",hanviet:"PHẢN",on:"ハン",kun:"そ（る）",meaning:"cong, vênh, ưỡn ngực",level:"N1"},
+{kanji:"練",hanviet:"LUYỆN",on:"レン",kun:"ね（る）",meaning:"trau chuốt, hoạch định",level:"N1"},
+{kanji:"煙",hanviet:"YÊN",on:"エン",kun:"けむ（る）",meaning:"bốc khói, bốc hơi",level:"N1"},
+{kanji:"募",hanviet:"MỘ",on:"ボ",kun:"つの（る）",meaning:"chiêu mộ, ngày càng mạnh",level:"N1"},
+{kanji:"図",hanviet:"ĐỒ",on:"ズ",kun:"はか（る）",meaning:"lập kế hoạch, mưu đồ",level:"N1"},
+{kanji:"勝",hanviet:"THẮNG",on:"ショウ",kun:"まさ（る）",meaning:"vượt trội hơn",level:"N1"},
+{kanji:"操",hanviet:"THAO",on:"ソウ",kun:"あやつ（る）",meaning:"thao tác, điều khiển",level:"N1"},
+{kanji:"誤",hanviet:"NGỘ",on:"ゴ",kun:"あやま（る）",meaning:"lầm lỡ, sai lầm",level:"N1"},
+{kanji:"群",hanviet:"QUẦN",on:"グン",kun:"むら（がる）",meaning:"tập hợp lại, bầy đàn",level:"N1"},
+{kanji:"連",hanviet:"LIÊN",on:"レン",kun:"つら（なる）",meaning:"chạy dài, xếp thành hàng",level:"N1"},
+{kanji:"強",hanviet:"CƯỜNG",on:"キョウ",kun:"し（いる）",meaning:"ép, cưỡng bức",level:"N1"},
+{kanji:"率",hanviet:"SUẤT",on:"ソツ",kun:"ひき（いる）",meaning:"dẫn đầu, đi tiên phong",level:"N1"},
+{kanji:"帯",hanviet:"ĐỚI",on:"タイ",kun:"お（びる）",meaning:"nhiễm, mang, được giao phó",level:"N1"},
+{kanji:"省",hanviet:"TỈNH",on:"セイ",kun:"かえり（みる）",meaning:"nhìn lại, ngoái lại phía sau",level:"N1"},
+{kanji:"試",hanviet:"THÍ",on:"シ",kun:"こころ（みる）",meaning:"thử",level:"N1"},
+{kanji:"経",hanviet:"KINH",on:"ケイ",kun:"へ（る）",meaning:"kinh qua, trải qua",level:"N1"},
+{kanji:"絶",hanviet:"TUYỆT",on:"ゼツ",kun:"た（える）",meaning:"tuyệt chủng",level:"N1"},
+{kanji:"映",hanviet:"ÁNH",on:"エイ",kun:"は（える）",meaning:"chiếu sáng lên, thấy đẹp",level:"N1"},
+{kanji:"構",hanviet:"CẤU",on:"コウ",kun:"かま（える）",meaning:"để vào vị trí, lập gia đình",level:"N1"},
+{kanji:"仕",hanviet:"SĨ",on:"シ",kun:"つか（える）",meaning:"phụng sự, phục vụ",level:"N1"},
+{kanji:"授",hanviet:"THỤ",on:"ジュ",kun:"さず（ける）",meaning:"ban, tặng, trao tặng",level:"N1"},
+{kanji:"設",hanviet:"THIẾT",on:"セツ",kun:"もう（ける）",meaning:"thiết lập, trang bị",level:"N1"},
+{kanji:"告",hanviet:"CÁO",on:"コク",kun:"つ（げる）",meaning:"thông báo",level:"N1"},
+{kanji:"和",hanviet:"HÒA",on:"ワ",kun:"やわ（らげる）",meaning:"làm nguôi, làm dịu đi",level:"N1"},
+{kanji:"定",hanviet:"ĐỊNH",on:"テイ",kun:"さだ（める）",meaning:"làm ổn định, xác định",level:"N1"},
+{kanji:"乱",hanviet:"LOẠN",on:"ラン",kun:"みだ（れる）",meaning:"bị xáo trộn, rối bời",level:"N1"},
+{kanji:"訪",hanviet:"PHỎNG",on:"ホウ",kun:"おとず（れる）",meaning:"ghé thăm, ghé chơi",level:"N1"},
+{kanji:"慕",hanviet:"MỘ",on:"ボ",kun:"した（う）",meaning:"tưởng nhớ, ngưỡng mộ",level:"N1"},
+{kanji:"潤",hanviet:"NHUẬN",on:"ジュン",kun:"うるお（う）",meaning:"ẩm ướt, phong phú",level:"N1"},
+{kanji:"漂",hanviet:"PHIÊU",on:"ヒョウ",kun:"ただよ（う）",meaning:"dạt dào, trôi nổi",level:"N1"},
+{kanji:"繕",hanviet:"THIỆN",on:"ゼン",kun:"つくろ（う）",meaning:"sắp gọn gàng, sửa chữa",level:"N1"},
+{kanji:"賄",hanviet:"HỐI",on:"ワイ",kun:"まかな（う）",meaning:"hối lộ, chịu chi trả",level:"N1"},
+{kanji:"養",hanviet:"DƯỠNG",on:"ヨウ",kun:"やしな（う）",meaning:"nuôi dưỡng, xây dựng",level:"N1"},
+{kanji:"裁",hanviet:"TÀI",on:"サイ",kun:"さば（く）",meaning:"đánh giá, phán xét",level:"N1"},
+{kanji:"嘆",hanviet:"THÁN",on:"タン",kun:"なげ（く）",meaning:"than thở, kêu than",level:"N1"},
+{kanji:"懐",hanviet:"HOÀI",on:"カイ",kun:"なつ（く）",meaning:"theo, hoài niệm",level:"N1"},
+{kanji:"欺",hanviet:"KHI",on:"ギ",kun:"あざむ（く）",meaning:"lừa gạt, bẫy",level:"N1"},
+{kanji:"赴",hanviet:"PHÓ",on:"フ",kun:"おもむ（く）",meaning:"tới, tiến",level:"N1"},
+{kanji:"貫",hanviet:"QUÁN",on:"カン",kun:"つらぬ（く）",meaning:"xuyên qua, quán triệt",level:"N1"},
+{kanji:"仰",hanviet:"NGƯỠNG",on:"ギョウ",kun:"あお（ぐ）",meaning:"nhìn lên, ngưỡng mộ",level:"N1"},
+{kanji:"侵",hanviet:"XÂM",on:"シン",kun:"おか（す）",meaning:"xâm nhập, vi phạm",level:"N1"},
+{kanji:"促",hanviet:"XÚC",on:"ソク",kun:"うなが（す）",meaning:"thúc đẩy, thúc giục",level:"N1"},
+{kanji:"施",hanviet:"THI",on:"シ",kun:"ほどこ（す）",meaning:"bố thí, thi hành",level:"N1"},
+{kanji:"催",hanviet:"THÔI",on:"サイ",kun:"もよお（す）",meaning:"tổ chức, cảm thấy",level:"N1"},
+{kanji:"尽",hanviet:"TẬN",on:"ジン",kun:"つく（す）",meaning:"cạn kiệt, cống hiến",level:"N1"},
+{kanji:"励",hanviet:"LỆ",on:"レイ",kun:"はげ（ます）",meaning:"khích lệ, động viên",level:"N1"},
+{kanji:"摘",hanviet:"TRÍCH",on:"テキ",kun:"つ（む）",meaning:"hái hoa, chỉ ra chỗ sai",level:"N1"},
+{kanji:"挑",hanviet:"THIÊU",on:"チョウ",kun:"いど（む）",meaning:"thách thức",level:"N1"},
+{kanji:"臨",hanviet:"LÂM",on:"リン",kun:"のぞ（む）",meaning:"tiếp cận, đối mặt",level:"N1"},
+{kanji:"阻",hanviet:"TRỞ",on:"ソ",kun:"はば（む）",meaning:"cản trở, ngăn cản",level:"N1"},
+{kanji:"謹",hanviet:"CẨN",on:"キン",kun:"つつし（む）",meaning:"kính cẩn, thành kính",level:"N1"},
+{kanji:"惜",hanviet:"TÍCH",on:"セキ",kun:"お（しむ）",meaning:"tiếc, quý giá",level:"N1"},
+{kanji:"織",hanviet:"CHỨC",on:"ショク",kun:"お（る）",meaning:"dệt",level:"N1"},
+{kanji:"凝",hanviet:"NGƯNG",on:"ギョウ",kun:"こ（る）",meaning:"đông lại, tập trung nhiệt tình",level:"N1"},
+{kanji:"漏",hanviet:"LẬU",on:"ロウ",kun:"も（る）",meaning:"rò, rỉ, dột",level:"N1"},
+{kanji:"焦",hanviet:"TIÊU",on:"ショウ",kun:"あせ（る）",meaning:"sốt ruột, vội vàng",level:"N1"},
+{kanji:"悟",hanviet:"NGỘ",on:"ゴ",kun:"さと（る）",meaning:"giác ngộ, nhận thức được",level:"N1"},
+{kanji:"粘",hanviet:"NIÊM",on:"ネン",kun:"ねば（る）",meaning:"dính, kiên trì",level:"N1"},
+{kanji:"誇",hanviet:"KHOA",on:"コ",kun:"ほこ（る）",meaning:"tự hào, kiêu hãnh",level:"N1"},
+{kanji:"怠",hanviet:"ĐÃI",on:"タイ",kun:"おこた（る）",meaning:"bỏ bê, sao nhãng",level:"N1"},
+{kanji:"遮",hanviet:"XÁ",on:"シャ",kun:"さえぎ（る）",meaning:"chặn đứng, cắt ngang",level:"N1"},
+{kanji:"葬",hanviet:"TÁNG",on:"ソウ",kun:"ほうむ（る）",meaning:"chôn cất",level:"N1"},
+{kanji:"奉",hanviet:"PHỤNG",on:"ホウ",kun:"たてまつ（る）",meaning:"mời, biếu, phụng sự",level:"N1"},
+{kanji:"滞",hanviet:"TRỆ",on:"タイ",kun:"とどこお（る）",meaning:"ứ lại, đình trệ",level:"N1"},
+{kanji:"携",hanviet:"HUỀ",on:"ケイ",kun:"たずさ（わる）",meaning:"tham gia vào việc",level:"N1"},
+{kanji:"染",hanviet:"NHIỄM",on:"セン",kun:"し（みる）",meaning:"thấm, ngấm, nhiễm",level:"N1"},
+{kanji:"懲",hanviet:"TRỪNG",on:"チョウ",kun:"こ（りる）",meaning:"nhận bài học, mở mắt",level:"N1"},
+{kanji:"据",hanviet:"CỨ",on:"キョ",kun:"す（える）",meaning:"đặt, để",level:"N1"},
+{kanji:"添",hanviet:"THIÊM",on:"テン",kun:"そ（える）",meaning:"đính vào, thêm vào",level:"N1"},
+{kanji:"堪",hanviet:"KHAM",on:"カン",kun:"た（える）",meaning:"chịu đựng được",level:"N1"},
+{kanji:"鍛",hanviet:"ĐOÀN",on:"タン",kun:"きた（える）",meaning:"rèn luyện, rèn giũa",level:"N1"},
+{kanji:"唱",hanviet:"XƯỚNG",on:"ショウ",kun:"とな（える）",meaning:"tụng, xướng",level:"N1"},
+{kanji:"控",hanviet:"KHỐNG",on:"コウ",kun:"ひか（える）",meaning:"kiềm chế, ghi lại",level:"N1"},
+{kanji:"衰",hanviet:"SUY",on:"スイ",kun:"おとろ（える）",meaning:"sa sút, suy yếu",level:"N1"},
+{kanji:"駆",hanviet:"KHU",on:"ク",kun:"か（ける）",meaning:"chạy nhanh, phi",level:"N1"},
+{kanji:"遂",hanviet:"TOẠI",on:"スイ",kun:"と（げる）",meaning:"đạt tới, thực hiện được",level:"N1"},
+{kanji:"掲",hanviet:"KIẾT",on:"ケイ",kun:"かか（げる）",meaning:"treo lên, đăng",level:"N1"},
+{kanji:"傷",hanviet:"THƯƠNG",on:"ショウ",kun:"いた（める）",meaning:"gây thương tích, làm tổn thương",level:"N1"},
+{kanji:"緩",hanviet:"HOÃN",on:"カン",kun:"ゆる（める）",meaning:"nới lỏng, làm chậm",level:"N1"},
+{kanji:"廃",hanviet:"PHẾ",on:"ハイ",kun:"すた（れる）",meaning:"lỗi thời, phế bỏ",level:"N1"},
+{kanji:"膨",hanviet:"BÀNH",on:"ボウ",kun:"ふく（れる）",meaning:"to ra, phồng lên",level:"N1"},
+{kanji:"免",hanviet:"MIỄN",on:"メン",kun:"まぬか（れる）",meaning:"thoát được, được miễn",level:"N1"},
+{kanji:"堅",hanviet:"KIÊN",on:"ケン",kun:"かた（い）",meaning:"cứng, vững vàng",level:"N1"},
+{kanji:"臭",hanviet:"XÚ",on:"シュウ",kun:"くさ（い）",meaning:"hôi, thối, tanh",level:"N1"},
+{kanji:"渋",hanviet:"SÁP",on:"ジュウ",kun:"しぶ（い）",meaning:"chát, đắng, cau có",level:"N1"},
+{kanji:"尊",hanviet:"TÔN",on:"ソン",kun:"とうと（い）",meaning:"hiếm, quý giá",level:"N1"},
+{kanji:"醜",hanviet:"XẤU",on:"シュウ",kun:"みにく（い）",meaning:"xấu xí",level:"N1"},
+{kanji:"惜",hanviet:"TÍCH",on:"セキ",kun:"おし（い）",meaning:"tiếc, thương",level:"N1"},
+{kanji:"怪",hanviet:"QUÁI",on:"カイ",kun:"あや（しい）",meaning:"khó tin, vụng về",level:"N1"},
+{kanji:"卑",hanviet:"TY",on:"ヒ",kun:"いや（しい）",meaning:"ti tiện, hạ cấp",level:"N1"},
+{kanji:"厳",hanviet:"NGHIÊM",on:"ゲン",kun:"きび（しい）",meaning:"nghiêm khắc, hà khắc",level:"N1"},
+{kanji:"悔",hanviet:"HỐI",on:"カイ",kun:"くや（しい）",meaning:"đáng tiếc, hối hận",level:"N1"},
+{kanji:"詳",hanviet:"TƯỜNG",on:"ショウ",kun:"くわ（しい）",meaning:"biết rõ, tường tận",level:"N1"},
+{kanji:"寂",hanviet:"TỊCH",on:"セキ",kun:"さび（しい）",meaning:"buồn, cô đơn",level:"N1"},
+{kanji:"乏",hanviet:"PHẠP",on:"ボウ",kun:"とぼ（しい）",meaning:"bần cùng, thiếu sót",level:"N1"},
+{kanji:"激",hanviet:"KHÍCH",on:"ゲキ",kun:"はげ（しい）",meaning:"mãnh liệt, kịch liệt",level:"N1"},
+{kanji:"著",hanviet:"TRỨ",on:"チョ",kun:"いちじる（しい）",meaning:"đáng kể, rõ rệt",level:"N1"},
+{kanji:"懐",hanviet:"HOÀI",on:"カイ",kun:"なつか（しい）",meaning:"nhớ tiếc, mong nhớ",level:"N1"},
+{kanji:"煩",hanviet:"PHIỀN",on:"ハン",kun:"わずらわ（しい）",meaning:"phiền muộn, phiền hà",level:"N1"},
+{kanji:"哀",hanviet:"AI",on:"アイ",kun:"あわ（れ）",meaning:"buồn, thương",level:"N1"},
+{kanji:"挨",hanviet:"AI",on:"アイ",kun:"—",meaning:"tiếp cận, chào hỏi",level:"N1"},
+{kanji:"宛",hanviet:"UYỂN",on:"エン",kun:"あ（てる）",meaning:"gửi đến",level:"N1"},
+{kanji:"尉",hanviet:"ÚY",on:"イ",kun:"—",meaning:"cấp bậc quân sự",level:"N1"},
+{kanji:"茨",hanviet:"TỬ",on:"—",kun:"いばら",meaning:"gai",level:"N1"},
+{kanji:"咽",hanviet:"YẾT",on:"イン",kun:"むせ（る）",meaning:"nghẹn, cổ họng",level:"N1"},
+{kanji:"淫",hanviet:"DÂM",on:"イン",kun:"みだ（ら）",meaning:"dâm, phóng túng",level:"N1"},
+{kanji:"亜",hanviet:"Á",on:"ア",kun:"—",meaning:"Á châu, thứ hai",level:"N1"},
+// ── N1 từ tài liệu 1級漢字 ──
+{kanji:"衛",hanviet:"VỆ",on:"エイ",kun:"まも（る）",meaning:"bảo vệ, vệ sinh",level:"N1"},
+{kanji:"護",hanviet:"HỘ",on:"ゴ",kun:"まも（る）",meaning:"bảo hộ, chăm sóc",level:"N1"},
+{kanji:"策",hanviet:"SÁCH",on:"サク",kun:"—",meaning:"kế sách, chính sách",level:"N1"},
+{kanji:"視",hanviet:"THỊ",on:"シ",kun:"み（る）",meaning:"thị giác, quan điểm",level:"N1"},
+{kanji:"射",hanviet:"XẠ",on:"シャ",kun:"い（る）",meaning:"bắn, phóng, tiêm",level:"N1"},
+{kanji:"謝",hanviet:"TẠ",on:"シャ",kun:"あやま（る）",meaning:"tạ lỗi, cảm tạ",level:"N1"},
+{kanji:"守",hanviet:"THỦ",on:"シュ",kun:"まも（る）",meaning:"bảo vệ, tuân thủ",level:"N1"},
+{kanji:"証",hanviet:"CHỨNG",on:"ショウ",kun:"あかし",meaning:"bằng chứng, chứng minh",level:"N1"},
+{kanji:"障",hanviet:"CHƯỚNG",on:"ショウ",kun:"さわ（る）",meaning:"chướng ngại, trở ngại",level:"N1"},
+{kanji:"推",hanviet:"SUY",on:"スイ",kun:"お（す）",meaning:"thúc đẩy, suy luận",level:"N1"},
+{kanji:"薦",hanviet:"TIẾN",on:"セン",kun:"すす（める）",meaning:"tiến cử, giới thiệu",level:"N1"},
+{kanji:"創",hanviet:"SÁNG",on:"ソウ",kun:"—",meaning:"sáng tạo, sáng lập",level:"N1"},
+{kanji:"態",hanviet:"THÁI",on:"タイ",kun:"—",meaning:"thái độ, trạng thái",level:"N1"},
+{kanji:"徴",hanviet:"TRƯNG",on:"チョウ",kun:"—",meaning:"đặc trưng, thu thuế",level:"N1"},
+{kanji:"提",hanviet:"ĐỀ",on:"テイ",kun:"さ（げる）",meaning:"đề xuất, cung cấp",level:"N1"},
+{kanji:"討",hanviet:"THẢO",on:"トウ",kun:"う（つ）",meaning:"thảo luận, chinh phạt",level:"N1"},
+{kanji:"統",hanviet:"THỐNG",on:"トウ",kun:"す（べる）",meaning:"thống nhất, thống kê",level:"N1"},
+{kanji:"秘",hanviet:"BÍ",on:"ヒ",kun:"ひ（める）",meaning:"bí mật",level:"N1"},
+{kanji:"密",hanviet:"MẬT",on:"ミツ",kun:"—",meaning:"mật thiết, bí mật",level:"N1"},
+{kanji:"模",hanviet:"MÔ",on:"モ",kun:"—",meaning:"mô phỏng, quy mô",level:"N1"},
+{kanji:"良",hanviet:"LƯƠNG",on:"リョウ",kun:"よ（い）",meaning:"tốt đẹp, lương tâm",level:"N1"},
+{kanji:"援",hanviet:"VIỆN",on:"エン",kun:"—",meaning:"viện trợ, giúp đỡ",level:"N1"},
+{kanji:"憶",hanviet:"ỨC",on:"オク",kun:"—",meaning:"ký ức, trí nhớ",level:"N1"},
+{kanji:"歓",hanviet:"HOAN",on:"カン",kun:"よろこ（ぶ）",meaning:"hoan nghênh, vui mừng",level:"N1"},
+{kanji:"迎",hanviet:"NGHÊNH",on:"ゲイ",kun:"むか（える）",meaning:"đón chào, hoan nghênh",level:"N1"},
+{kanji:"功",hanviet:"CÔNG",on:"コウ",kun:"いさお",meaning:"công tích, thành công",level:"N1"},
+{kanji:"克",hanviet:"KHẮC",on:"コク",kun:"—",meaning:"khắc phục",level:"N1"},
+{kanji:"催",hanviet:"THÔI",on:"サイ",kun:"もよお（す）",meaning:"tổ chức, thúc giục",level:"N1"},
+{kanji:"釈",hanviet:"THÍCH",on:"シャク",kun:"—",meaning:"giải thích, thả ra",level:"N1"},
+{kanji:"充",hanviet:"SUNG",on:"ジュウ",kun:"あ（てる）",meaning:"đầy đủ, bổ sung",level:"N1"},
+{kanji:"循",hanviet:"TUẦN",on:"ジュン",kun:"—",meaning:"tuần hoàn, tuân thủ",level:"N1"},
+{kanji:"析",hanviet:"TÍCH",on:"セキ",kun:"—",meaning:"phân tích",level:"N1"},
+{kanji:"属",hanviet:"THUỘC",on:"ゾク",kun:"—",meaning:"thuộc vào, kim loại",level:"N1"},
+{kanji:"択",hanviet:"TRẠCH",on:"タク",kun:"えら（ぶ）",meaning:"lựa chọn",level:"N1"},
+{kanji:"致",hanviet:"TRÍ",on:"チ",kun:"いた（す）",meaning:"nhất trí, đạt tới",level:"N1"},
+{kanji:"徹",hanviet:"TRIỆT",on:"テツ",kun:"とお（る）",meaning:"triệt để, xuyên suốt",level:"N1"},
+{kanji:"燃",hanviet:"NHIÊN",on:"ネン",kun:"も（える）",meaning:"nhiên liệu, đốt cháy",level:"N1"},
+{kanji:"排",hanviet:"BÀI",on:"ハイ",kun:"—",meaning:"bài trừ, tiêu nước",level:"N1"},
+{kanji:"冒",hanviet:"MẠO",on:"ボウ",kun:"おか（す）",meaning:"mạo hiểm, mở đầu",level:"N1"},
+{kanji:"没",hanviet:"MỘT",on:"ボツ",kun:"—",meaning:"chìm, qua đời",level:"N1"},
+{kanji:"慢",hanviet:"MẠN",on:"マン",kun:"—",meaning:"kiêu mạn, mãn tính",level:"N1"},
+{kanji:"誘",hanviet:"DỤ",on:"ユウ",kun:"さそ（う）",meaning:"dụ dỗ, mời",level:"N1"},
+{kanji:"慮",hanviet:"LỰ",on:"リョ",kun:"おもんぱか（る）",meaning:"xem xét, lo lắng",level:"N1"},
+{kanji:"惑",hanviet:"HOẶC",on:"ワク",kun:"まど（う）",meaning:"nghi hoặc, cám dỗ",level:"N1"},
+{kanji:"概",hanviet:"KHÁI",on:"ガイ",kun:"おおむ（ね）",meaning:"khái quát, đại thể",level:"N1"},
+{kanji:"革",hanviet:"CÁCH",on:"カク",kun:"かわ",meaning:"cách tân, da",level:"N1"},
+{kanji:"勘",hanviet:"KHÁM",on:"カン",kun:"—",meaning:"trực giác, linh cảm",level:"N1"},
+{kanji:"棄",hanviet:"KHÍ",on:"キ",kun:"す（てる）",meaning:"bỏ, vứt bỏ",level:"N1"},
+{kanji:"軽",hanviet:"KHINH",on:"ケイ",kun:"かる（い）",meaning:"nhẹ, khinh suất",level:"N1"},
+{kanji:"抗",hanviet:"KHÁNG",on:"コウ",kun:"—",meaning:"kháng nghị, phản kháng",level:"N1"},
+{kanji:"興",hanviet:"HƯNG",on:"コウ",kun:"おこ（る）",meaning:"hứng thú, phục hưng",level:"N1"},
+{kanji:"奮",hanviet:"PHẤN",on:"フン",kun:"ふる（う）",meaning:"phấn khích, hào hứng",level:"N1"},
+{kanji:"根",hanviet:"CĂN",on:"コン",kun:"ね",meaning:"căn bản, gốc rễ",level:"N1"},
+{kanji:"拠",hanviet:"CỨ",on:"キョ",kun:"よ（る）",meaning:"căn cứ, chứng cứ",level:"N1"},
+{kanji:"災",hanviet:"TAI",on:"サイ",kun:"わざわ（い）",meaning:"thảm hoạ, tai nạn",level:"N1"},
+{kanji:"裁",hanviet:"TÀI",on:"サイ",kun:"さば（く）",meaning:"xét xử, phán quyết",level:"N1"},
+{kanji:"衆",hanviet:"CHÚNG",on:"シュウ",kun:"—",meaning:"công chúng, đại chúng",level:"N1"},
+{kanji:"除",hanviet:"TRỪ",on:"ジョ",kun:"のぞ（く）",meaning:"ngoại trừ, miễn trừ",level:"N1"},
+{kanji:"振",hanviet:"CHẤN",on:"シン",kun:"ふ（る）",meaning:"chấn động, vẫy",level:"N1"},
+{kanji:"審",hanviet:"THẨM",on:"シン",kun:"—",meaning:"thẩm tra, xét xử",level:"N1"},
+{kanji:"素",hanviet:"TỐ",on:"ス",kun:"—",meaning:"tố chất, nguyên tố",level:"N1"},
+{kanji:"抵",hanviet:"ĐỂ",on:"テイ",kun:"—",meaning:"đề kháng, nói chung",level:"N1"},
+{kanji:"廃",hanviet:"PHẾ",on:"ハイ",kun:"すた（れる）",meaning:"phế bỏ, bãi bỏ",level:"N1"},
+{kanji:"白",hanviet:"BẠCH",on:"ハク",kun:"しろ（い）",meaning:"thú nhận, minh bạch",level:"N1"},
+{kanji:"弁",hanviet:"BIỆN",on:"ベン",kun:"—",meaning:"biện hộ, cơm hộp",level:"N1"},
+{kanji:"免",hanviet:"MIỄN",on:"メン",kun:"まぬか（れる）",meaning:"miễn giảm, cho phép",level:"N1"},
+{kanji:"還",hanviet:"HOÀN",on:"カン",kun:"—",meaning:"trả lại, hoàn nguyên",level:"N1"},
+{kanji:"享",hanviet:"HƯỞNG",on:"キョウ",kun:"—",meaning:"hưởng thụ",level:"N1"},
+{kanji:"吟",hanviet:"NGÂM",on:"ギン",kun:"—",meaning:"ngâm thơ, giám định",level:"N1"},
+{kanji:"侍",hanviet:"THỊ",on:"ジ",kun:"さむらい",meaning:"samurai, hầu cận",level:"N1"},
+{kanji:"償",hanviet:"THƯỜNG",on:"ショウ",kun:"つぐな（う）",meaning:"bồi thường",level:"N1"},
+{kanji:"辛",hanviet:"TÂN",on:"シン",kun:"から（い）",meaning:"cay, cay đắng",level:"N1"},
+{kanji:"遷",hanviet:"THIÊN",on:"セン",kun:"—",meaning:"chuyển dời, dời đô",level:"N1"},
+{kanji:"代",hanviet:"ĐẠI",on:"タイ",kun:"か（わる）",meaning:"thay thế, ca kíp",level:"N1"},
+{kanji:"拓",hanviet:"THÁC",on:"タク",kun:"ひら（く）",meaning:"khai thác, khai phá",level:"N1"},
+{kanji:"諾",hanviet:"NẶC",on:"ダク",kun:"—",meaning:"đồng ý, ưng thuận",level:"N1"},
+{kanji:"窒",hanviet:"CHẤT",on:"チツ",kun:"—",meaning:"ngạt thở, bí",level:"N1"},
+{kanji:"呈",hanviet:"TRÌNH",on:"テイ",kun:"—",meaning:"biếu, tặng",level:"N1"},
+{kanji:"繁",hanviet:"PHỒN",on:"ハン",kun:"しげ（る）",meaning:"phồn thịnh, um tùm",level:"N1"},
+{kanji:"赴",hanviet:"PHÓ",on:"フ",kun:"おもむ（く）",meaning:"tới nhận chức",level:"N1"},
+{kanji:"沸",hanviet:"PHÍ",on:"フツ",kun:"わ（く）",meaning:"sôi, sôi sùng sục",level:"N1"},
+{kanji:"騰",hanviet:"ĐẰNG",on:"トウ",kun:"—",meaning:"tăng vọt, phi lên",level:"N1"},
+{kanji:"抱",hanviet:"BÃO",on:"ホウ",kun:"かか（える）",meaning:"ôm ấp, ấp ủ",level:"N1"},
+{kanji:"妨",hanviet:"PHƯƠNG",on:"ボウ",kun:"また（げる）",meaning:"phương hại, cản trở",level:"N1"},
+{kanji:"抑",hanviet:"ỨC",on:"ヨク",kun:"おさ（える）",meaning:"kìm nén, ức chế",level:"N1"},
+{kanji:"濫",hanviet:"LẠM",on:"ラン",kun:"—",meaning:"lạm dụng, tràn lan",level:"N1"},
+{kanji:"裂",hanviet:"LIỆT",on:"レツ",kun:"さ（ける）",meaning:"đổ bể, phân liệt",level:"N1"},
+{kanji:"露",hanviet:"LỘ",on:"ロ",kun:"つゆ",meaning:"sương, phơi bày",level:"N1"},
+{kanji:"勇",hanviet:"DŨNG",on:"ユウ",kun:"いさ（む）",meaning:"dũng cảm",level:"N1"},
+{kanji:"潔",hanviet:"KHIẾT",on:"ケツ",kun:"いさぎよ（い）",meaning:"đơn giản, thanh khiết",level:"N1"},
+{kanji:"賢",hanviet:"HIỀN",on:"ケン",kun:"かしこ（い）",meaning:"thông minh, sáng suốt",level:"N1"},
+{kanji:"謙",hanviet:"KHIÊM",on:"ケン",kun:"—",meaning:"khiêm tốn",level:"N1"},
+{kanji:"虚",hanviet:"HƯ",on:"キョ",kun:"—",meaning:"khiêm tốn, hư không",level:"N1"},
+{kanji:"秀",hanviet:"TÚ",on:"シュウ",kun:"ひい（でる）",meaning:"ưu tú, xuất sắc",level:"N1"},
+{kanji:"丈",hanviet:"TRƯỢNG",on:"ジョウ",kun:"たけ",meaning:"chiều cao, bền chắc",level:"N1"},
+{kanji:"慎",hanviet:"THẬN",on:"シン",kun:"つつし（む）",meaning:"thận trọng",level:"N1"},
+{kanji:"迅",hanviet:"TẤN",on:"ジン",kun:"—",meaning:"nhanh, mau lẹ",level:"N1"},
+{kanji:"誠",hanviet:"THÀNH",on:"セイ",kun:"まこと",meaning:"thành thực, trung thành",level:"N1"},
+{kanji:"柔",hanviet:"NHU",on:"ジュウ",kun:"やわ（らか）",meaning:"mềm dẻo, linh hoạt",level:"N1"},
+{kanji:"敏",hanviet:"MẪN",on:"ビン",kun:"さと（い）",meaning:"mẫn cảm, nhanh nhẹn",level:"N1"},
+{kanji:"愉",hanviet:"DU",on:"ユ",kun:"—",meaning:"hài lòng, vui nhộn",level:"N1"},
+{kanji:"頑",hanviet:"NGOAN",on:"ガン",kun:"かたく（な）",meaning:"ngoan cố, bướng bỉnh",level:"N1"},
+{kanji:"酷",hanviet:"KHỐC",on:"コク",kun:"—",meaning:"tàn nhẫn, khắc nghiệt",level:"N1"},
+{kanji:"光沢",hanviet:"TRẠCH",on:"タク",kun:"さわ",meaning:"bóng, sáng bề mặt",level:"N1"},
+{kanji:"胆",hanviet:"ĐẢM",on:"タン",kun:"きも",meaning:"to gan, can đảm",level:"N1"},
+{kanji:"淡",hanviet:"ĐẠM",on:"タン",kun:"あわ（い）",meaning:"nước ngọt, nhạt",level:"N1"},
+{kanji:"鈍",hanviet:"ĐỘN",on:"ドン",kun:"にぶ（い）",meaning:"đần độn, chậm chạp",level:"N1"},
+{kanji:"貧",hanviet:"BẦN",on:"ヒン",kun:"まず（しい）",meaning:"bần cùng, nghèo túng",level:"N1"},
+{kanji:"忙",hanviet:"MANG",on:"ボウ",kun:"いそが（しい）",meaning:"bận rộn",level:"N1"},
+{kanji:"凡",hanviet:"PHÀM",on:"ボン",kun:"—",meaning:"bình thường, phàm",level:"N1"},
+{kanji:"厄",hanviet:"ÁCH",on:"ヤク",kun:"わざわい",meaning:"tai hoạ, phiền hà",level:"N1"},
+{kanji:"憂",hanviet:"ƯU",on:"ユウ",kun:"うれ（える）",meaning:"lo lắng, ưu phiền",level:"N1"},
+{kanji:"滑",hanviet:"HOẠT",on:"カツ",kun:"なめ（らか）",meaning:"trơn tru, bôi trơn",level:"N1"},
+{kanji:"肝",hanviet:"CAN",on:"カン",kun:"きも",meaning:"gan, quan trọng",level:"N1"},
+{kanji:"奇",hanviet:"KỲ",on:"キ",kun:"—",meaning:"kỳ lạ, số lẻ",level:"N1"},
+{kanji:"貴",hanviet:"QUÝ",on:"キ",kun:"たっと（い）",meaning:"quý tộc, quý báu",level:"N1"},
+{kanji:"窮",hanviet:"CÙNG",on:"キュウ",kun:"—",meaning:"khốn khó, gò bó",level:"N1"},
+{kanji:"巧",hanviet:"XẢO",on:"コウ",kun:"たく（み）",meaning:"tinh xảo, khéo léo",level:"N1"},
+{kanji:"豪",hanviet:"HÀO",on:"ゴウ",kun:"—",meaning:"hào phóng, hào hùng",level:"N1"},
+{kanji:"華",hanviet:"HOA",on:"カ",kun:"はな",meaning:"hoa lệ, tráng lệ",level:"N1"},
+{kanji:"壮",hanviet:"TRÁNG",on:"ソウ",kun:"さか（ん）",meaning:"tráng kiện, hùng mạnh",level:"N1"},
+{kanji:"鮮",hanviet:"TIÊN",on:"セン",kun:"あざ（やか）",meaning:"tươi, sống động",level:"N1"},
+{kanji:"粗",hanviet:"THÔ",on:"ソ",kun:"あら（い）",meaning:"thô ráp, sơ sài",level:"N1"},
+{kanji:"透",hanviet:"THẤU",on:"トウ",kun:"とお（る）",meaning:"trong suốt, xuyên qua",level:"N1"},
+{kanji:"薄",hanviet:"BẠC",on:"ハク",kun:"うす（い）",meaning:"mỏng manh, nhạt",level:"N1"},
+{kanji:"頻",hanviet:"TẦN",on:"ヒン",kun:"しき（り）",meaning:"tấp nập, tần suất",level:"N1"},
+{kanji:"朴",hanviet:"PHÁC",on:"ボク",kun:"—",meaning:"mộc mạc, hồn nhiên",level:"N1"},
+{kanji:"魔",hanviet:"MA",on:"マ",kun:"—",meaning:"ác ma, quỷ ma",level:"N1"},
+{kanji:"妙",hanviet:"DIỆU",on:"ミョウ",kun:"—",meaning:"kỳ diệu, vi diệu",level:"N1"},
+{kanji:"烈",hanviet:"LIỆT",on:"レツ",kun:"—",meaning:"quyết liệt, mãnh liệt",level:"N1"},
+{kanji:"猛",hanviet:"MÃNH",on:"モウ",kun:"たけ（しい）",meaning:"mãnh liệt, hung hăng",level:"N1"},
+{kanji:"宜",hanviet:"NGHI",on:"ギ",kun:"よろ（しい）",meaning:"thích hợp, tiện lợi",level:"N1"},
+{kanji:"懸",hanviet:"HUYỀN",on:"ケン",kun:"か（ける）",meaning:"treo lơ lửng, say mê",level:"N1"},
+{kanji:"徐",hanviet:"TỪ",on:"ジョ",kun:"おもむろ（に）",meaning:"chầm chậm, từ từ",level:"N1"},
+{kanji:"唯",hanviet:"DUY",on:"ユイ",kun:"ただ",meaning:"duy nhất, chỉ",level:"N1"},
+{kanji:"欄",hanviet:"LAN",on:"ラン",kun:"—",meaning:"cột báo, lan can",level:"N1"},
+{kanji:"患",hanviet:"HOẠN",on:"カン",kun:"わずら（う）",meaning:"bệnh nhân, tai hoạ",level:"N1"},
+{kanji:"眼",hanviet:"NHÃN",on:"ガン",kun:"め",meaning:"nhãn khoa, con mắt",level:"N1"},
+{kanji:"菌",hanviet:"KHUẨN",on:"キン",kun:"—",meaning:"vi khuẩn, nấm",level:"N1"},
+{kanji:"筋",hanviet:"CÂN",on:"キン",kun:"すじ",meaning:"cơ bắp, gân, cốt truyện",level:"N1"},
+{kanji:"姿",hanviet:"TƯ",on:"シ",kun:"すがた",meaning:"bóng dáng, phong thái",level:"N1"},
+{kanji:"脂",hanviet:"CHI",on:"シ",kun:"あぶら",meaning:"mỡ, dầu",level:"N1"},
+{kanji:"歯",hanviet:"XỈ",on:"シ",kun:"は",meaning:"răng",level:"N1"},
+{kanji:"耳",hanviet:"NHĨ",on:"ジ",kun:"みみ",meaning:"tai, nhĩ",level:"N1"},
+{kanji:"鼻",hanviet:"TỴ",on:"ビ",kun:"はな",meaning:"cái mũi",level:"N1"},
+{kanji:"寿",hanviet:"THỌ",on:"ジュ",kun:"ことぶき",meaning:"tuổi thọ",level:"N1"},
+{kanji:"症",hanviet:"CHỨNG",on:"ショウ",kun:"—",meaning:"bệnh, chứng trạng",level:"N1"},
+{kanji:"衰",hanviet:"SUY",on:"スイ",kun:"おとろ（える）",meaning:"suy yếu, lão suy",level:"N1"},
+{kanji:"睡",hanviet:"THỤY",on:"スイ",kun:"ねむ（る）",meaning:"giấc ngủ",level:"N1"},
+{kanji:"腸",hanviet:"TRƯỜNG",on:"チョウ",kun:"はらわた",meaning:"ruột, đại tràng",level:"N1"},
+{kanji:"聴",hanviet:"THÍNH",on:"チョウ",kun:"き（く）",meaning:"thính giác, nghe giảng",level:"N1"},
+{kanji:"尿",hanviet:"NIỆU",on:"ニョウ",kun:"—",meaning:"nước tiểu",level:"N1"},
+{kanji:"妊",hanviet:"NHÂM",on:"ニン",kun:"はら（む）",meaning:"có thai, thai nghén",level:"N1"},
+{kanji:"肺",hanviet:"PHẾ",on:"ハイ",kun:"—",meaning:"phổi",level:"N1"},
+{kanji:"剖",hanviet:"PHẪU",on:"ボウ",kun:"—",meaning:"giải phẫu",level:"N1"},
+{kanji:"痢",hanviet:"LỴ",on:"リ",kun:"—",meaning:"tiêu chảy, kiết lỵ",level:"N1"},
+{kanji:"酸",hanviet:"TOAN",on:"サン",kun:"す（っぱい）",meaning:"acid, chua",level:"N1"},
+{kanji:"磁",hanviet:"TỪ",on:"ジ",kun:"—",meaning:"từ tính, nam châm",level:"N1"},
+{kanji:"樹",hanviet:"THỤ",on:"ジュ",kun:"き",meaning:"cây cối",level:"N1"},
+{kanji:"晶",hanviet:"TINH",on:"ショウ",kun:"—",meaning:"kết tinh, thủy tinh",level:"N1"},
+{kanji:"星",hanviet:"TINH",on:"セイ",kun:"ほし",meaning:"ngôi sao, hành tinh",level:"N1"},
+{kanji:"浮",hanviet:"PHÙ",on:"フ",kun:"う（かぶ）",meaning:"sức nổi, nổi lên",level:"N1"},
+{kanji:"胞",hanviet:"BÀO",on:"ホウ",kun:"—",meaning:"tế bào, đồng bào",level:"N1"},
+{kanji:"摩",hanviet:"MA",on:"マ",kun:"—",meaning:"mài, ma sát",level:"N1"},
+{kanji:"膜",hanviet:"MÔ",on:"マク",kun:"—",meaning:"màng, lớp",level:"N1"},
+{kanji:"滅",hanviet:"DIỆT",on:"メツ",kun:"ほろ（びる）",meaning:"tiêu diệt, diệt vong",level:"N1"},
+{kanji:"噴",hanviet:"PHÚN",on:"フン",kun:"ふ（く）",meaning:"phun trào, vòi nước",level:"N1"},
+{kanji:"脈",hanviet:"MẠCH",on:"ミャク",kun:"—",meaning:"mạch, nhịp, dãy núi",level:"N1"},
+{kanji:"往",hanviet:"VÃNG",on:"オウ",kun:"—",meaning:"vãng lai, khứ hồi",level:"N1"},
+{kanji:"幹",hanviet:"CÁN",on:"カン",kun:"みき",meaning:"cán bộ, thân cây",level:"N1"},
+{kanji:"軌",hanviet:"QUỸ",on:"キ",kun:"—",meaning:"quỹ đạo, đường ray",level:"N1"},
+{kanji:"鎖",hanviet:"TỎA",on:"サ",kun:"くさり",meaning:"xích, phong toả",level:"N1"},
+{kanji:"縦",hanviet:"TUNG",on:"ジュウ",kun:"たて",meaning:"điều khiển, chiều dọc",level:"N1"},
+{kanji:"脱",hanviet:"THOÁT",on:"ダツ",kun:"ぬ（ぐ）",meaning:"thoát khỏi, cởi",level:"N1"},
+{kanji:"墜",hanviet:"TRỤY",on:"ツイ",kun:"お（ちる）",meaning:"rơi xuống, máy bay rơi",level:"N1"},
+{kanji:"搬",hanviet:"BAN",on:"ハン",kun:"—",meaning:"vận tải, chuyên chở",level:"N1"},
+{kanji:"臨",hanviet:"LÂM",on:"リン",kun:"のぞ（む）",meaning:"lâm thời, lâm sàng",level:"N1"},
+{kanji:"益",hanviet:"ÍCH",on:"エキ",kun:"ま（す）",meaning:"lợi ích, hữu ích",level:"N1"},
+{kanji:"企",hanviet:"XÍ",on:"キ",kun:"くわだ（てる）",meaning:"doanh nghiệp, kế hoạch",level:"N1"},
+{kanji:"契",hanviet:"KHẾ",on:"ケイ",kun:"ちぎ（る）",meaning:"khế ước, hợp đồng",level:"N1"},
+{kanji:"倹",hanviet:"KIỆM",on:"ケン",kun:"—",meaning:"tiết kiệm",level:"N1"},
+{kanji:"雇",hanviet:"CỐ",on:"コ",kun:"やと（う）",meaning:"thuê mướn, tuyển dụng",level:"N1"},
+{kanji:"購",hanviet:"CẤU",on:"コウ",kun:"—",meaning:"mua vào, nhập hàng",level:"N1"},
+{kanji:"債",hanviet:"TRÁI",on:"サイ",kun:"—",meaning:"nợ nần, công trái",level:"N1"},
+{kanji:"需",hanviet:"NHU",on:"ジュ",kun:"—",meaning:"nhu cầu, nhu yếu",level:"N1"},
+{kanji:"酬",hanviet:"THÙ",on:"シュウ",kun:"むく（いる）",meaning:"trả công, báo đáp",level:"N1"},
+{kanji:"占",hanviet:"CHIẾM",on:"セン",kun:"し（める）",meaning:"chiếm lãnh, độc chiếm",level:"N1"},
+{kanji:"宣",hanviet:"TUYÊN",on:"セン",kun:"—",meaning:"tuyên ngôn, tuyên truyền",level:"N1"},
+{kanji:"組",hanviet:"TỔ",on:"ソ",kun:"く（む）",meaning:"tổ chức, bộ tổ",level:"N1"},
+{kanji:"倉",hanviet:"THƯƠNG",on:"ソウ",kun:"くら",meaning:"nhà kho, tàng trữ",level:"N1"},
+{kanji:"盤",hanviet:"BÀN",on:"ハン",kun:"—",meaning:"nền móng, bàn cờ",level:"N1"},
+{kanji:"賦",hanviet:"PHÚ",on:"フ",kun:"—",meaning:"trả góp, thiên phú",level:"N1"},
+{kanji:"幣",hanviet:"TỆ",on:"ヘイ",kun:"ぬさ",meaning:"tiền giấy, tiền tệ",level:"N1"},
+{kanji:"融",hanviet:"DUNG",on:"ユウ",kun:"と（ける）",meaning:"tài chính, tan chảy",level:"N1"},
+{kanji:"裕",hanviet:"DỤ",on:"ユウ",kun:"—",meaning:"giàu có, dư dật",level:"N1"},
+{kanji:"預",hanviet:"DỰ",on:"ヨ",kun:"あず（ける）",meaning:"tiền gửi, giữ hộ",level:"N1"},
+{kanji:"浪",hanviet:"LÃNG",on:"ロウ",kun:"なみ",meaning:"lãng phí, lang thang",level:"N1"},
+{kanji:"梅",hanviet:"MAI",on:"バイ",kun:"うめ",meaning:"cây mai, mùa mưa",level:"N1"},
+{kanji:"芽",hanviet:"NHA",on:"ガ",kun:"め",meaning:"mầm, búp",level:"N1"},
+{kanji:"昆",hanviet:"CÔN",on:"コン",kun:"—",meaning:"côn trùng",level:"N1"},
+{kanji:"沿",hanviet:"DUYÊN",on:"エン",kun:"そ（う）",meaning:"dọc theo, ven biển",level:"N1"},
+{kanji:"峠",hanviet:"—",on:"—",kun:"とうげ",meaning:"đèo",level:"N1"},
+{kanji:"岬",hanviet:"—",on:"—",kun:"みさき",meaning:"mũi đất",level:"N1"},
+{kanji:"滝",hanviet:"—",on:"—",kun:"たき",meaning:"thác nước",level:"N1"},
+{kanji:"沼",hanviet:"CHIẾU",on:"ショウ",kun:"ぬま",meaning:"ao, đầm",level:"N1"},
+{kanji:"霧",hanviet:"VỤ",on:"ム",kun:"きり",meaning:"sương mù",level:"N1"},
+{kanji:"霜",hanviet:"SƯƠNG",on:"ソウ",kun:"しも",meaning:"sương giá",level:"N1"},
+{kanji:"雷",hanviet:"LÔI",on:"ライ",kun:"かみなり",meaning:"sấm sét",level:"N1"},
+{kanji:"泡",hanviet:"BÀO",on:"ホウ",kun:"あわ",meaning:"bong bóng, bọt",level:"N1"},
+{kanji:"渦",hanviet:"OA",on:"カ",kun:"うず",meaning:"xoáy, lốc",level:"N1"},
+{kanji:"潮",hanviet:"TRIỀU",on:"チョウ",kun:"しお",meaning:"thuỷ triều, dòng nước",level:"N1"},
+{kanji:"松",hanviet:"TÙNG",on:"ショウ",kun:"まつ",meaning:"cây thông",level:"N1"},
+{kanji:"桜",hanviet:"ANH",on:"オウ",kun:"さくら",meaning:"hoa anh đào",level:"N1"},
+{kanji:"穂",hanviet:"HỒ",on:"スイ",kun:"ほ",meaning:"bông lúa",level:"N1"},
+{kanji:"苗",hanviet:"MIÊU",on:"ビョウ",kun:"なえ",meaning:"cây con, mạ",level:"N1"},
+{kanji:"酢",hanviet:"TỬU",on:"サク",kun:"す",meaning:"giấm",level:"N1"},
+{kanji:"豆",hanviet:"ĐẬU",on:"トウ",kun:"まめ",meaning:"đậu",level:"N1"},
+{kanji:"跡",hanviet:"TÍCH",on:"セキ",kun:"あと",meaning:"dấu vết, vết tích",level:"N1"},
+{kanji:"穴",hanviet:"HUYỆT",on:"ケツ",kun:"あな",meaning:"hang, lỗ hổng",level:"N1"},
+{kanji:"堀",hanviet:"QUẬT",on:"クツ",kun:"ほり",meaning:"hào, kênh đào",level:"N1"},
+{kanji:"溝",hanviet:"CÂU",on:"コウ",kun:"みぞ",meaning:"rãnh, khoảng cách",level:"N1"},
+{kanji:"扉",hanviet:"PHI",on:"ヒ",kun:"とびら",meaning:"cánh cửa",level:"N1"},
+{kanji:"縄",hanviet:"THẰNG",on:"ジョウ",kun:"なわ",meaning:"sợi dây, thừng",level:"N1"},
+{kanji:"枠",hanviet:"—",on:"—",kun:"わく",meaning:"khung, giá",level:"N1"},
+{kanji:"塊",hanviet:"KHỐI",on:"カイ",kun:"かたまり",meaning:"cục, tảng, miếng",level:"N1"},
+{kanji:"傘",hanviet:"TÁN",on:"サン",kun:"かさ",meaning:"ô, dù",level:"N1"},
+{kanji:"旗",hanviet:"KỲ",on:"キ",kun:"はた",meaning:"cờ",level:"N1"},
+{kanji:"鏡",hanviet:"KÍNH",on:"キョウ",kun:"かがみ",meaning:"gương soi",level:"N1"},
+{kanji:"棚",hanviet:"—",on:"—",kun:"たな",meaning:"giá, kệ",level:"N1"},
+{kanji:"婿",hanviet:"TẾ",on:"セイ",kun:"むこ",meaning:"con rể",level:"N1"},
+{kanji:"嫁",hanviet:"GIÁ",on:"カ",kun:"とつ（ぐ）",meaning:"lấy chồng, nàng dâu",level:"N1"},
+{kanji:"鬼",hanviet:"QUỶ",on:"キ",kun:"おに",meaning:"con quỷ, sự độc ác",level:"N1"},
+{kanji:"麻",hanviet:"MA",on:"マ",kun:"あさ",meaning:"vải lanh, tê liệt",level:"N1"},
+{kanji:"絹",hanviet:"QUYẾN",on:"ケン",kun:"きぬ",meaning:"lụa, vải lụa",level:"N1"},
+{kanji:"紫",hanviet:"TỬ",on:"シ",kun:"むらさき",meaning:"màu tím",level:"N1"},
+{kanji:"冠",hanviet:"QUAN",on:"カン",kun:"かんむり",meaning:"vương miện",level:"N1"},
+{kanji:"舌",hanviet:"THIỆT",on:"ゼツ",kun:"した",meaning:"lưỡi",level:"N1"},
+{kanji:"唇",hanviet:"THẦN",on:"シン",kun:"くちびる",meaning:"môi",level:"N1"},
+{kanji:"裸",hanviet:"LA",on:"ラ",kun:"はだか",meaning:"khoả thân",level:"N1"},
+{kanji:"癖",hanviet:"TÍCH",on:"ヘキ",kun:"くせ",meaning:"thói, tật",level:"N1"},
+{kanji:"恥",hanviet:"SỈ",on:"チ",kun:"はじ",meaning:"sự xấu hổ",level:"N1"},
+{kanji:"訳",hanviet:"DỊCH",on:"ヤク",kun:"わけ",meaning:"lý do, dịch thuật",level:"N1"},
+{kanji:"誠",hanviet:"THÀNH",on:"セイ",kun:"まこと",meaning:"sự chân thực",level:"N1"},
+{kanji:"魂",hanviet:"HỒN",on:"コン",kun:"たましい",meaning:"linh hồn",level:"N1"},
+{kanji:"怒",hanviet:"NỘ",on:"ド",kun:"いかり",meaning:"cơn giận, tức giận",level:"N1"},
+{kanji:"過",hanviet:"QUÁ",on:"カ",kun:"あやまち",meaning:"sai lầm, lỗi lầm",level:"N1"},
+{kanji:"丘",hanviet:"KHÂU",on:"キュウ",kun:"おか",meaning:"đồi, quả đồi",level:"N1"},
+{kanji:"峰",hanviet:"PHONG",on:"ホウ",kun:"みね",meaning:"chóp, ngọn, đỉnh",level:"N1"},
+{kanji:"頂",hanviet:"ĐỈNH",on:"チョウ",kun:"いただき",meaning:"đỉnh núi",level:"N1"},
+{kanji:"霊",hanviet:"LINH",on:"レイ",kun:"たま",meaning:"linh hồn, ma quỷ",level:"N1"},
+{kanji:"雄",hanviet:"HÙNG",on:"ユウ",kun:"おす",meaning:"hùng, con đực",level:"N1"},
+{kanji:"賀",hanviet:"HẠ",on:"ガ",kun:"—",meaning:"chúc mừng",level:"N1"},
+{kanji:"獣",hanviet:"THÚ",on:"ジュウ",kun:"けもの",meaning:"loài thú",level:"N1"},
+{kanji:"監",hanviet:"GIÁM",on:"カン",kun:"—",meaning:"giám sát, kiểm tra",level:"N1"},
+{kanji:"督",hanviet:"ĐỐC",on:"トク",kun:"—",meaning:"đạo diễn, đốc thúc",level:"N1"},
+{kanji:"鑑",hanviet:"GIÁM",on:"カン",kun:"かんが（みる）",meaning:"giám định, gương soi",level:"N1"},
+{kanji:"喜",hanviet:"HỶ",on:"キ",kun:"よろこ（ぶ）",meaning:"vui mừng, hạnh phúc",level:"N1"},
+{kanji:"棋",hanviet:"KỲ",on:"キ",kun:"—",meaning:"cờ tướng, kỳ thủ",level:"N1"},
+{kanji:"戯",hanviet:"HÍ",on:"ギ",kun:"たわむ（れる）",meaning:"kịch, trò vui",level:"N1"},
+{kanji:"鼓",hanviet:"CỔ",on:"コ",kun:"つづみ",meaning:"trống, cổ vũ",level:"N1"},
+{kanji:"娯",hanviet:"NGU",on:"ゴ",kun:"—",meaning:"tiêu khiển, vui chơi",level:"N1"},
+{kanji:"紺",hanviet:"CÁM",on:"コン",kun:"—",meaning:"màu xanh xẫm",level:"N1"},
+{kanji:"彩",hanviet:"THÁI",on:"サイ",kun:"いろど（る）",meaning:"màu sắc, sắc thái",level:"N1"},
+{kanji:"趣",hanviet:"THÚ",on:"シュ",kun:"おもむき",meaning:"thú vị, sở thích",level:"N1"},
+{kanji:"緒",hanviet:"TỰ",on:"ショ",kun:"お",meaning:"đầu mối, cùng nhau",level:"N1"},
+{kanji:"奏",hanviet:"TẤU",on:"ソウ",kun:"かな（でる）",meaning:"tấu nhạc, diễn tấu",level:"N1"},
+{kanji:"吹",hanviet:"XUY",on:"スイ",kun:"ふ（く）",meaning:"chơi nhạc cụ thổi",level:"N1"},
+{kanji:"拍",hanviet:"PHÁCH",on:"ハク",kun:"—",meaning:"vỗ tay, nhịp tim",level:"N1"},
+{kanji:"譜",hanviet:"PHỔ",on:"フ",kun:"—",meaning:"bản nhạc, gia phả",level:"N1"},
+{kanji:"幕",hanviet:"MẠC",on:"バク",kun:"まく",meaning:"màn, rèm, Mạc Phủ",level:"N1"},
+{kanji:"漫",hanviet:"MẠN",on:"マン",kun:"—",meaning:"manga, tản mạn",level:"N1"},
+{kanji:"魅",hanviet:"MỊ",on:"ミ",kun:"—",meaning:"ma lực, quyến rũ",level:"N1"},
+{kanji:"謡",hanviet:"DAO",on:"ヨウ",kun:"うた（う）",meaning:"dân ca, khúc hát",level:"N1"},
+{kanji:"孤",hanviet:"CÔ",on:"コ",kun:"—",meaning:"cô đơn, mồ côi",level:"N1"},
+{kanji:"宗",hanviet:"TÔN",on:"シュウ",kun:"むね",meaning:"tôn giáo, dòng",level:"N1"},
+{kanji:"称",hanviet:"XƯNG",on:"ショウ",kun:"とな（える）",meaning:"ca ngợi, đặt tên",level:"N1"},
+{kanji:"飾",hanviet:"SỨC",on:"ショク",kun:"かざ（る）",meaning:"tô điểm, trang trí",level:"N1"},
+{kanji:"崇",hanviet:"SÙNG",on:"スウ",kun:"—",meaning:"sùng bái, tôn sùng",level:"N1"},
+{kanji:"聖",hanviet:"THÁNH",on:"セイ",kun:"ひじり",meaning:"thánh thư, thần thánh",level:"N1"},
+{kanji:"禅",hanviet:"THIỀN",on:"ゼン",kun:"—",meaning:"thiền định, thiền đường",level:"N1"},
+{kanji:"僧",hanviet:"TĂNG",on:"ソウ",kun:"—",meaning:"nhà sư",level:"N1"},
+{kanji:"俗",hanviet:"TỤC",on:"ゾク",kun:"—",meaning:"phong tục, thế tục",level:"N1"},
+{kanji:"哲",hanviet:"TRIẾT",on:"テツ",kun:"—",meaning:"triết học",level:"N1"},
+{kanji:"殿",hanviet:"ĐIỆN",on:"デン",kun:"との",meaning:"cung điện, ngài",level:"N1"},
+{kanji:"宮",hanviet:"CUNG",on:"キュウ",kun:"みや",meaning:"cung điện, cung vua",level:"N1"},
+{kanji:"徳",hanviet:"ĐỨC",on:"トク",kun:"—",meaning:"đạo đức, nhân đức",level:"N1"},
+{kanji:"碑",hanviet:"BI",on:"ヒ",kun:"いしぶみ",meaning:"bia đá, văn bia",level:"N1"},
+{kanji:"侮",hanviet:"VŨ",on:"ブ",kun:"あなど（る）",meaning:"khinh thường, nhục mạ",level:"N1"},
+{kanji:"辱",hanviet:"NHỤC",on:"ジョク",kun:"はずかし（める）",meaning:"xỉ nhục, nhục nhã",level:"N1"},
+{kanji:"封",hanviet:"PHONG",on:"フウ",kun:"—",meaning:"phong kiến, niêm phong",level:"N1"},
+{kanji:"幽",hanviet:"U",on:"ユウ",kun:"かす（か）",meaning:"u linh, ma quỷ",level:"N1"},
+{kanji:"既",hanviet:"KÝ",on:"キ",kun:"すで（に）",meaning:"đã có gia đình, đã rồi",level:"N1"},
+{kanji:"儀",hanviet:"NGHI",on:"ギ",kun:"—",meaning:"nghi thức, nghi lễ",level:"N1"},
+{kanji:"郷",hanviet:"HƯƠNG",on:"キョウ",kun:"—",meaning:"cố hương, quê hương",level:"N1"},
+{kanji:"愁",hanviet:"SẦU",on:"シュウ",kun:"うれ（い）",meaning:"nhớ nhà, sầu não",level:"N1"},
+{kanji:"愚",hanviet:"NGU",on:"グ",kun:"おろ（か）",meaning:"ngu ngốc, than vãn",level:"N1"},
+{kanji:"痴",hanviet:"SI",on:"チ",kun:"し（れる）",meaning:"si tình, ngốc nghếch",level:"N1"},
+{kanji:"遇",hanviet:"NGỘ",on:"グウ",kun:"あ（う）",meaning:"cảnh ngộ, đối đãi",level:"N1"},
+{kanji:"己",hanviet:"KỶ",on:"コ",kun:"おのれ",meaning:"bản thân, mình",level:"N1"},
+{kanji:"孝",hanviet:"HIẾU",on:"コウ",kun:"—",meaning:"hiếu hạnh, có hiếu",level:"N1"},
+{kanji:"熟",hanviet:"THỤC",on:"ジュク",kun:"う（れる）",meaning:"thành ngữ, thành thục",level:"N1"},
+{kanji:"冗",hanviet:"NHŨNG",on:"ジョウ",kun:"—",meaning:"dài dòng, chuyện đùa",level:"N1"},
+{kanji:"嬢",hanviet:"NƯƠNG",on:"ジョウ",kun:"—",meaning:"tiểu thư, cô gái",level:"N1"},
+{kanji:"紳",hanviet:"THÂN",on:"シン",kun:"—",meaning:"thân sĩ, người cao sang",level:"N1"},
+{kanji:"誕",hanviet:"ĐẢN",on:"タン",kun:"—",meaning:"sinh nhật, ra đời",level:"N1"},
+{kanji:"忠",hanviet:"TRUNG",on:"チュウ",kun:"—",meaning:"trung thành, trung thực",level:"N1"},
+{kanji:"輩",hanviet:"BỐI",on:"ハイ",kun:"ともがら",meaning:"tiền bối, hậu bối",level:"N1"},
+{kanji:"扶",hanviet:"PHÙ",on:"フ",kun:"—",meaning:"nuôi dưỡng, giúp đỡ",level:"N1"},
+{kanji:"墓",hanviet:"MỘ",on:"ボ",kun:"はか",meaning:"mộ phần, nghĩa địa",level:"N1"},
+{kanji:"褒",hanviet:"BAO",on:"ホウ",kun:"ほ（める）",meaning:"khen ngợi, phần thưởng",level:"N1"},
+{kanji:"僕",hanviet:"BỘC",on:"ボク",kun:"しもべ",meaning:"tôi (nam), đầy tớ",level:"N1"},
+{kanji:"誉",hanviet:"DỰ",on:"ヨ",kun:"ほま（れ）",meaning:"danh dự, vinh dự",level:"N1"},
+{kanji:"緯",hanviet:"VĨ",on:"イ",kun:"—",meaning:"vĩ độ, kinh vĩ",level:"N1"},
+{kanji:"乙",hanviet:"ẤT",on:"オツ",kun:"おと",meaning:"Ất, dí dỏm",level:"N1"},
+{kanji:"括",hanviet:"QUÁT",on:"カツ",kun:"くく（る）",meaning:"gộp, tổng cộng",level:"N1"},
+{kanji:"紀",hanviet:"KỶ",on:"キ",kun:"—",meaning:"thế kỷ, kỷ nguyên",level:"N1"},
+{kanji:"径",hanviet:"KÍNH",on:"ケイ",kun:"—",meaning:"đường kính, bán kính",level:"N1"},
+{kanji:"甲",hanviet:"GIÁP",on:"コウ",kun:"きのえ",meaning:"giáp, so sánh",level:"N1"},
+{kanji:"項",hanviet:"HẠNG",on:"コウ",kun:"うなじ",meaning:"hạng mục, điều khoản",level:"N1"},
+{kanji:"軸",hanviet:"TRỤC",on:"ジク",kun:"—",meaning:"trục, trục trái đất",level:"N1"},
+{kanji:"斜",hanviet:"TÀ",on:"シャ",kun:"なな（め）",meaning:"mặt nghiêng, nghiêng",level:"N1"},
+{kanji:"瞬",hanviet:"THUẤN",on:"シュン",kun:"またた（く）",meaning:"chớp mắt, khoảnh khắc",level:"N1"},
+{kanji:"旬",hanviet:"TUẦN",on:"ジュン",kun:"しゅん",meaning:"thượng tuần, hạ tuần",level:"N1"},
+{kanji:"垂",hanviet:"THÙY",on:"スイ",kun:"た（れる）",meaning:"thẳng đứng, rủ xuống",level:"N1"},
+{kanji:"是",hanviet:"THỊ",on:"ゼ",kun:"これ",meaning:"đúng, phải",level:"N1"},
+{kanji:"端",hanviet:"ĐOAN",on:"タン",kun:"は",meaning:"cực đoan, mũi nhọn",level:"N1"},
+{kanji:"範",hanviet:"PHẠM",on:"ハン",kun:"—",meaning:"phạm vi, mô phạm",level:"N1"},
+{kanji:"微",hanviet:"VI",on:"ビ",kun:"かす（か）",meaning:"tinh tế, vi lượng",level:"N1"},
+{kanji:"遍",hanviet:"BIẾN",on:"ヘン",kun:"—",meaning:"khắp, phổ biến",level:"N1"},
+{kanji:"架",hanviet:"GIÁ",on:"カ",kun:"か（ける）",meaning:"giá, giàn, xây dựng",level:"N1"},
+];
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let deck = [], idx = 0, correct = 0, incorrect = 0;
+let isAnimating = false, isFlipped = false;
+let currentIsCorrectMeaning = true;
+let selectedLevel = "ALL", mode = "easy", streak = 0;
+let timerHandle = null;
+let TIME_LIMIT = 6000;
+
+// ══════════════════════════════════════════
+// DOM
+// ══════════════════════════════════════════
+const cardEl       = document.getElementById('card');
+const kanjiEl      = document.getElementById('kanji');
+const hanvietEl    = document.getElementById('han-viet');
+const hardReadingEl= document.getElementById('hard-reading');
+const shownMeaning = document.getElementById('shown-meaning');
+const readingOn    = document.getElementById('reading-on');
+const readingKun   = document.getElementById('reading-kun');
+const verdictBadge = document.getElementById('verdict-badge');
+const verdictHint  = document.getElementById('verdict-hint');
+const meaningArea  = document.getElementById('meaning-area');
+const backKanjiEl  = document.getElementById('back-kanji');
+const backContent  = document.getElementById('back-content');
+const progressText = document.getElementById('progress-text');
+const progressBar  = document.getElementById('progress-bar');
+const progressWrap = document.getElementById('progress-bar-wrap');
+const timerWrap    = document.getElementById('timer-wrap');
+const timerBar     = document.getElementById('timer-bar');
+const sCorrect     = document.getElementById('s-correct');
+const sIncorrect   = document.getElementById('s-incorrect');
+const feedbackEl   = document.getElementById('feedback');
+const doneScreen   = document.getElementById('done-screen');
+const streakBadge  = document.getElementById('streak-badge');
+const instruction  = document.getElementById('instruction');
+const kanjiArea    = document.getElementById('kanji-area');
+
+// ══════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function getWrongMeaning(card) {
+  const pool = ALL_KANJI.filter(c => c.kanji !== card.kanji && c.meaning !== card.meaning);
+  if (!pool.length) return "không có nghĩa";
+  return pool[Math.floor(Math.random() * pool.length)].meaning;
+}
+
+function playTone(freq, type = 'triangle', dur = 0.13) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════
+// TIMER
+// ══════════════════════════════════════════
+function startTimer() {
+  clearTimeout(timerHandle);
+  timerBar.style.transition = 'none';
+  timerBar.style.width = '100%';
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    timerBar.style.transition = `width ${TIME_LIMIT}ms linear`;
+    timerBar.style.width = '0%';
+  }));
+  timerHandle = setTimeout(() => handleWrong(true), TIME_LIMIT);
+}
+
+function stopTimer() {
+  clearTimeout(timerHandle);
+  timerBar.style.transition = 'none';
+}
+
+// ══════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════
+function renderCard() {
+  const card = deck[idx];
+  if (isFlipped) { cardEl.classList.remove('flipped'); isFlipped = false; }
+
+  // randomize ONCE for both modes
+  currentIsCorrectMeaning = Math.random() < 0.5;
+  const displayMeaning = currentIsCorrectMeaning ? card.meaning : getWrongMeaning(card);
+
+  kanjiEl.textContent = card.kanji;
+
+  if (mode === 'easy') {
+    hanvietEl.style.display    = 'none';
+    meaningArea.classList.remove('hidden');
+    hardReadingEl.style.display = 'none';
+    kanjiArea.classList.remove('hard-glow');
+
+    shownMeaning.textContent   = displayMeaning;
+    readingOn.textContent      = `On: ${card.on}`;
+    readingKun.textContent     = `Kun: ${card.kun}`;
+    verdictBadge.style.display = 'none';
+    verdictBadge.className     = '';
+    verdictHint.textContent    = 'Nghĩa hiển thị là đúng hay sai?';
+
+    progressWrap.style.display = 'block';
+    timerWrap.style.display    = 'none';
+    streakBadge.style.display  = 'none';
+    progressBar.style.width    = `${(idx / deck.length) * 100}%`;
+    progressText.textContent   = `${idx + 1} / ${deck.length}`;
+
+  } else {
+    // HARD: ẩn hán việt, hiện nghĩa + on/kun
+    hanvietEl.style.display    = 'none';
+    meaningArea.classList.remove('hidden');
+    hardReadingEl.style.display = 'none';
+    kanjiArea.classList.add('hard-glow');
+
+    shownMeaning.textContent   = displayMeaning;
+    readingOn.textContent      = `On: ${card.on}`;
+    readingKun.textContent     = `Kun: ${card.kun}`;
+    verdictBadge.style.display = 'none';
+    verdictBadge.className     = '';
+    verdictHint.textContent    = 'Nghĩa hiển thị là đúng hay sai?';
+
+    progressWrap.style.display = 'none';
+    timerWrap.style.display    = 'block';
+    streakBadge.style.display  = 'block';
+    streakBadge.textContent    = `🔥 ${streak}`;
+    progressText.textContent   = `Streak: ${streak}`;
+
+    startTimer();
+  }
+
+  backKanjiEl.textContent = card.kanji;
+  backContent.innerHTML = `
+    <strong>${card.kanji} (${card.hanviet})</strong><br>
+    <span class="correct-meaning">✓ ${card.meaning}</span><br><br>
+    <span style="color:#a78bfa">On: ${card.on}</span><br>
+    <span style="color:#67e8f9">Kun: ${card.kun}</span><br>
+    <small style="opacity:.45">Cấp độ: ${card.level}</small>
+  `;
+
+  sCorrect.textContent   = correct;
+  sIncorrect.textContent = incorrect;
+}
+
+// ══════════════════════════════════════════
+// ANSWER
+// ══════════════════════════════════════════
+function answer(userSaysCorrect) {
+  if (isAnimating) return;
+  isAnimating = true;
+  stopTimer();
+
+  // core logic: user's judgment vs actual
+  const isRight = (userSaysCorrect === currentIsCorrectMeaning);
+
+  if (mode === 'easy') {
+    if (currentIsCorrectMeaning) {
+      verdictBadge.textContent = '✓ Nghĩa này ĐÚNG';
+      verdictBadge.className = 'cb';
+    } else {
+      verdictBadge.textContent = '✗ Nghĩa này SAI';
+      verdictBadge.className = 'wb';
+    }
+    verdictBadge.style.display = 'inline-block';
+    verdictHint.textContent = isRight ? 'Bạn nhận xét đúng! 🎯' : 'Bạn nhận xét sai 😓';
+  }
+
+  if (isRight) {
+    correct++; streak++;
+    playTone(660, 'triangle', 0.15);
+    cardEl.classList.add('flash-correct');
+    feedbackEl.textContent = '✓'; feedbackEl.style.color = 'var(--correct)';
+  } else {
+    incorrect++;
+    playTone(220, 'sawtooth', 0.18);
+    cardEl.classList.add('flash-incorrect');
+    feedbackEl.textContent = '✗'; feedbackEl.style.color = 'var(--incorrect)';
+  }
+
+  feedbackEl.classList.add('show');
+  setTimeout(() => feedbackEl.classList.remove('show'), 450);
+
+  if (mode === 'hard' && !isRight) {
+    setTimeout(() => {
+      cardEl.classList.remove('flash-correct', 'flash-incorrect');
+      handleWrong(false); isAnimating = false;
+    }, 500);
+  } else {
+    setTimeout(() => {
+      cardEl.classList.remove('flash-correct', 'flash-incorrect');
+      idx++;
+      if (idx >= deck.length) showDone();
+      else renderCard();
+      isAnimating = false;
+    }, mode === 'easy' ? 600 : 400);
+  }
+}
+
+// ══════════════════════════════════════════
+// HARD FAIL / TIMEOUT
+// ══════════════════════════════════════════
+function handleWrong(isTimeout = false) {
+  stopTimer(); isAnimating = false;
+  const emoji = isTimeout ? '⏱' : '💥';
+  const title = isTimeout ? '⏱ Hết giờ!' : '💥 Sai rồi!';
+  document.getElementById('modal-emoji').textContent  = emoji;
+  document.getElementById('modal-title').textContent  = title;
+  document.getElementById('modal-streak').textContent = `${streak}`;
+  document.getElementById('modal-detail').innerHTML =
+    `Bạn đã đúng <strong style="color:#22c55e">${streak}</strong> câu liên tiếp<br>
+     <small style="opacity:.6">Trên ${idx + (isTimeout?1:0)} thẻ đã qua</small>`;
+  document.getElementById('modal-overlay').classList.add('visible');
+}
+
+// ══════════════════════════════════════════
+// FLIP
+// ══════════════════════════════════════════
+function flipCard() {
+  isFlipped = !isFlipped;
+  cardEl.classList.toggle('flipped', isFlipped);
+  playTone(440, 'sine', 0.08);
+}
+
+// ══════════════════════════════════════════
+// DONE (easy)
+// ══════════════════════════════════════════
+function showDone() {
+  const total = correct + incorrect;
+  const pct = total ? Math.round((correct / total) * 100) : 0;
+  document.getElementById('final-pct').textContent = `${pct}%`;
+  document.getElementById('final-detail').textContent =
+    `Đúng: ${correct}  ·  Sai: ${incorrect}  ·  Tổng: ${total} thẻ`;
+  progressBar.style.width = '100%';
+  doneScreen.classList.add('visible');
+  playTone(880, 'triangle', 0.3);
+}
+
+// ══════════════════════════════════════════
+// BUILD DECK
+// ══════════════════════════════════════════
+function buildDeck() {
+  stopTimer();
+  let src = selectedLevel === "ALL" ? ALL_KANJI : ALL_KANJI.filter(k => k.level === selectedLevel);
+  deck = shuffle(src);
+  idx = 0; correct = 0; incorrect = 0; streak = 0;
+  isFlipped = false; isAnimating = false;
+  doneScreen.classList.remove('visible');
+  document.getElementById('modal-overlay').classList.remove('visible');
+  renderCard();
+}
+
+function resetHard() {
+  streak = 0; idx = 0; correct = 0; incorrect = 0;
+  deck = shuffle(deck); isFlipped = false; isAnimating = false;
+  document.getElementById('modal-overlay').classList.remove('visible');
+  renderCard();
+}
+
+// ══════════════════════════════════════════
+// MODE UI
+// ══════════════════════════════════════════
+function applyModeUI() {
+  if (mode === 'easy') {
+    instruction.className = 'easy-inst';
+    instruction.textContent = '← Đúng  |  Nghĩa hiển thị là đúng hay sai?  |  Sai →';
+    document.querySelector('[data-mode="easy"]').className = 'mode-btn active-easy';
+    document.querySelector('[data-mode="hard"]').className = 'mode-btn';
+  } else {
+    instruction.className = 'hard-inst';
+    instruction.textContent = '← Đúng  |  ⏱ 6 giây  |  Sai 1 câu = reset  |  Sai →';
+    document.querySelector('[data-mode="easy"]').className = 'mode-btn';
+    document.querySelector('[data-mode="hard"]').className = 'mode-btn active-hard';
+  }
+}
+
+// ══════════════════════════════════════════
+// EVENTS
+// ══════════════════════════════════════════
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    mode = btn.dataset.mode;
+    document.getElementById('timer-select-wrap').style.display = mode === 'hard' ? 'flex' : 'none';
+    applyModeUI(); buildDeck();
+  });
+});
+document.querySelectorAll('.timer-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.timer-btn').forEach(b => b.classList.remove('active-timer'));
+    btn.classList.add('active-timer');
+    TIME_LIMIT = parseInt(btn.dataset.sec) * 1000;
+    buildDeck();
+  });
+});
+document.querySelectorAll('.lvl-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.lvl-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedLevel = btn.dataset.lvl; buildDeck();
+  });
+});
+document.getElementById('btn-correct').addEventListener('click',   () => answer(true));
+document.getElementById('btn-incorrect').addEventListener('click', () => answer(false));
+document.getElementById('btn-flip').addEventListener('click', flipCard);
+document.getElementById('btn-shuffle').addEventListener('click', () => {
+  stopTimer(); deck = shuffle(deck); idx = 0; correct = 0; incorrect = 0; streak = 0; renderCard();
+});
+document.getElementById('btn-restart').addEventListener('click', buildDeck);
+document.getElementById('modal-btn').addEventListener('click', () => {
+  if (mode === 'hard') resetHard(); else buildDeck();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft')  answer(true);
+  if (e.key === 'ArrowRight') answer(false);
+  if (e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); flipCard(); }
+});
+
+// ══════════════════════════════════════════
+// IMPROVED TOUCH — swipe + tap-to-flip
+// ══════════════════════════════════════════
+let touchX = 0, touchY = 0, touchT = 0;
+cardEl.addEventListener('touchstart', e => {
+  touchX = e.changedTouches[0].clientX;
+  touchY = e.changedTouches[0].clientY;
+  touchT = Date.now();
+}, { passive: true });
+cardEl.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchX;
+  const dy = e.changedTouches[0].clientY - touchY;
+  const dt = Date.now() - touchT;
+  const isSwipe = Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5;
+  const isTap = Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 300;
+  if (isSwipe) answer(dx > 0);
+  else if (isTap) flipCard();
+}, { passive: true });
+
+// ══════════════════════════════════════════
+// DYNAMIC LAYOUT — measure bars & adjust card
+// ══════════════════════════════════════════
+function updateLayout() {
+  const header = document.getElementById('header');
+  const modebar = document.getElementById('mode-bar');
+  const levelbar = document.getElementById('level-filter');
+  const controls = document.getElementById('controls');
+  const swipeHint = document.getElementById('swipe-hint');
+
+  const hH = header.getBoundingClientRect().bottom;
+  const mH = modebar.getBoundingClientRect().bottom;
+  const lH = levelbar.getBoundingClientRect().bottom;
+  const cH = controls.getBoundingClientRect().height;
+
+  document.documentElement.style.setProperty('--header-h', hH + 'px');
+  document.documentElement.style.setProperty('--modebar-bottom', mH + 'px');
+  document.documentElement.style.setProperty('--levelbar-bottom', lH + 'px');
+  document.documentElement.style.setProperty('--controls-h', cH + 'px');
+
+  // Update mode-bar top dynamically
+  modebar.style.top = hH + 'px';
+  levelbar.style.top = mH + 'px';
+
+  const timerWrapEl = document.getElementById('timer-wrap');
+  const progressWrapEl = document.getElementById('progress-bar-wrap');
+  timerWrapEl.style.top = lH + 'px';
+  progressWrapEl.style.top = lH + 'px';
+
+  const instEl = document.getElementById('instruction');
+  const streakEl = document.getElementById('streak-badge');
+  instEl.style.top = (lH + 10) + 'px';
+  streakEl.style.top = (lH + 10) + 'px';
+
+  if (swipeHint) swipeHint.style.bottom = (cH + 8) + 'px';
+}
+
+window.addEventListener('resize', updateLayout);
+window.addEventListener('orientationchange', () => setTimeout(updateLayout, 200));
+
+// ══════════════════════════════════════════
+// HIDE SWIPE HINT after first interaction
+// ══════════════════════════════════════════
+let hintShown = true;
+function hideHint() {
+  if (!hintShown) return;
+  const h = document.getElementById('swipe-hint');
+  if (h) { h.style.opacity = '0'; h.style.transition = 'opacity .5s'; }
+  hintShown = false;
+}
+cardEl.addEventListener('touchend', hideHint, { once: true });
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+applyModeUI();
+buildDeck();
+requestAnimationFrame(() => { updateLayout(); });
+</script>
+</body>
+</html>
